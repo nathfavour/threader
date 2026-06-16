@@ -1,7 +1,7 @@
 BINARY_NAME=threader
 
 build:
-	go build -o $(BINARY_NAME) ./cmd/threader
+	bash install.sh
 
 clean:
 	rm -f $(BINARY_NAME)

@@ -7,7 +7,7 @@
   "install_dir": "~/.local/bin",
   "build": {
     "steps": [
-      "make build"
+      "bash install.sh"
     ],
     "bin": "threader",
     "toolchain": "go"

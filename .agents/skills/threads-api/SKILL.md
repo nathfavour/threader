@@ -236,10 +236,45 @@ def make_threads_request(url, access_token, method='GET', **kwargs):
 3. **Two-stage process**: Required for videos and carousels to allow processing time
 
 ### Rate Limits
-- Rate limits vary by endpoint and access level
-- Standard rate limit: 200 calls per hour per user
-- Monitor `X-Business-Use-Case-Usage` header in responses
-- Implement exponential backoff for rate limit errors
+Threads API rate limits are calculated based on a rolling 24-hour window and are unique to each app-user pair.
+
+*   **Publishing Limits (Per Profile):**
+    *   **Posts:** 250 API-published posts per 24 hours. (A carousel counts as one post).
+    *   **Replies:** 1,000 replies per 24 hours.
+    *   **Deletions:** 100 deletions per 24 hours.
+*   **General API Call Quota:**
+    *   The quota is calculated using the formula: `4,800 × Number of Impressions`.
+    *   **Minimum Floor:** If an account has fewer than 10 impressions, the API defaults to 10, providing a minimum of **48,000 calls per 24 hours**.
+
+### Media Constraints
+All media must be hosted on a **publicly accessible server** so Meta's servers can fetch the content during the container creation process.
+
+#### Text Posts
+*   **Character Limit:** 500 characters maximum.
+*   **Links:** Maximum of 5 links (includes both inline links and link attachments).
+
+#### Image Specifications
+*   **Formats:** JPEG, PNG.
+*   **File Size:** 8 MB maximum.
+*   **Aspect Ratio:** Up to 10:1.
+*   **Dimensions:** Width between 320px and 1440px.
+*   **Color Space:** sRGB (other spaces will be converted).
+
+#### Video Specifications
+*   **Formats:** MP4, MOV (MPEG-4 Part 14).
+*   **Duration:** 300 seconds (5 minutes) maximum.
+*   **File Size:** 1 GB maximum.
+*   **Video Codec:** H.264 or HEVC, progressive scan, closed GOP, 4:2:0 chroma subsampling.
+*   **Audio Codec:** AAC, 48khz max, mono or stereo.
+*   **Frame Rate:** 23–60 FPS.
+*   **Resolution:** Maximum width of 1920px.
+
+#### Carousel Posts
+*   **Item Count:** Minimum of 2 and maximum of 20 items.
+*   **Content:** Can be a mix of images and videos.
+
+### Monitoring Usage
+You can programmatically check a profile's current rate limit status by querying the `GET /{threads-user-id}/threads_publishing_limit` endpoint. This returns `quota_usage` and `quota_total` for the current 24-hour window.
 
 ### Webhooks
 - Real-time notifications for events like mentions, replies, or new followers

@@ -20,12 +20,14 @@ import (
 type MarketingCell struct {
 	AI    *ai.Client
 	Synth *synthesis.Synthesizer
+	Quota *QuotaManager
 }
 
 func NewMarketingCell(aiClient *ai.Client) *MarketingCell {
 	return &MarketingCell{
 		AI:    aiClient,
 		Synth: synthesis.NewSynthesizer(aiClient),
+		Quota: NewQuotaManager(config.DataDir()),
 	}
 }
 
@@ -38,6 +40,11 @@ func (c *MarketingCell) Pulse(ctx context.Context) error {
 	active, err := m.GetDefault()
 	if err != nil {
 		return err
+	}
+
+	if !c.Quota.CanPublish(active.Name) {
+		fmt.Printf("MarketingCell: Quota exceeded for %s. Sleeping.\n", active.Name)
+		return nil
 	}
 
 	// Record activity to keep spine awake if we are doing work
@@ -83,7 +90,18 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 		return nil
 	}
 
-	// 2. Pick one and craft post
+	// 2. Pre-publication Validation
+	if err := c.validateMedia(targetAsset); err != nil {
+		fmt.Printf("MarketingCell: Media validation failed for asset %s: %v\n", targetAsset.ID, err)
+		// Mark as skipped/failed to avoid infinite loop on bad asset
+		targetAsset.Posted = true
+		targetAsset.ThreadID = "SKIPPED_INVALID_MEDIA"
+		updatedData, _ := json.MarshalIndent(targetAsset, "", "  ")
+		_ = os.WriteFile(targetPath, updatedData, 0644)
+		return nil
+	}
+
+	// 3. Pick one and craft post
 	// Fetch token for this container
 	vaultKey := fmt.Sprintf("THREADS_TOKEN_%s", strings.ToUpper(cont.Name))
 	token, err := c.AI.VaultGet(vaultKey)
@@ -97,14 +115,21 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 		return err
 	}
 
-	// 3. Post to Threads
+	// 4. Validate Character Limit (Threads: 500 chars)
+	if len(postText) > 500 {
+		fmt.Printf("MarketingCell: Post text too long (%d chars). Truncating.\n", len(postText) )
+		postText = postText[:497] + "..."
+	}
+
+	// 5. Post to Threads
 	client := NewClient(token)
 	threadID, err := client.CreateTextPost(postText)
 	if err != nil {
 		return err
 	}
 
-	// 4. Mark as posted
+	// 6. Record usage and mark as posted
+	c.Quota.RecordPublish(cont.Name)
 	targetAsset.Posted = true
 	targetAsset.ThreadID = threadID
 	
@@ -112,5 +137,30 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 	_ = os.WriteFile(targetPath, updatedData, 0644)
 
 	fmt.Printf("MarketingCell: Successfully posted to Threads for project %s (ThreadID: %s)\n", p.Name, threadID)
+	return nil
+}
+
+func (c *MarketingCell) validateMedia(a *media.Asset) error {
+	info, err := os.Stat(a.FilePath)
+	if err != nil {
+		return err
+	}
+
+	ext := strings.ToLower(filepath.Ext(a.FilePath))
+	size := info.Size()
+
+	switch ext {
+	case ".jpg", ".jpeg", ".png":
+		if size > 8*1024*1024 {
+			return fmt.Errorf("image size exceeds 8MB limit: %.2fMB", float64(size)/(1024*1024))
+		}
+	case ".mp4", ".mov":
+		if size > 1024*1024*1024 {
+			return fmt.Errorf("video size exceeds 1GB limit: %.2fGB", float64(size)/(1024*1024*1024))
+		}
+	default:
+		return fmt.Errorf("unsupported media format: %s", ext)
+	}
+
 	return nil
 }

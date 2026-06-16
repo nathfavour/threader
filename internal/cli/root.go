@@ -105,8 +105,23 @@ func isProcessRunning(pid int) bool {
 	if err != nil {
 		return false
 	}
+	// On Unix, FindProcess always succeeds. Need to send signal 0 to check existence.
 	err = process.Signal(syscall.Signal(0))
-	return err == nil
+	if err != nil {
+		return false
+	}
+
+	// Linux-specific: check the process name to ensure it's actually 'threader'
+	// and not another process that reused the PID.
+	commPath := fmt.Sprintf("/proc/%d/comm", pid)
+	if data, err := os.ReadFile(commPath); err == nil {
+		comm := string(data)
+		// Check if it contains 'threader'
+		return os.Args[0] == "threader" || filepath.Base(os.Args[0]) == "threader" || 
+			   filepath.Base(comm) == "threader\n" || filepath.Base(comm) == "threader"
+	}
+
+	return true
 }
 
 func Execute() {

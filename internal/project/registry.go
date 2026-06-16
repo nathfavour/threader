@@ -74,14 +74,32 @@ func (r *Registry) Get(id string) (*Project, bool) {
 	return p, ok
 }
 
-func (r *Registry) List() []*Project {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	list := make([]*Project, 0, len(r.projects))
-	for _, p := range r.projects {
-		list = append(list, p)
+func (r *Registry) Update(id string, name, desc, voice, site, code string) (*Project, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p, ok := r.projects[id]
+	if !ok {
+		return nil, fmt.Errorf("project %q not found", id)
 	}
-	return list
+
+	if name != "" {
+		p.Name = name
+	}
+	if desc != "" {
+		p.Description = desc
+	}
+	if voice != "" {
+		p.BrandVoice = voice
+	}
+	if site != "" {
+		p.WebsiteURL = site
+	}
+	if code != "" {
+		p.CodebaseURL = code
+	}
+
+	return p, r.save()
 }
 
 func (r *Registry) save() error {

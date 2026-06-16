@@ -1,23 +1,28 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 
+	"github.com/nathfavour/threader/internal/ai"
+	"github.com/nathfavour/threader/internal/container"
 	"github.com/nathfavour/threader/pkg/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfgFile string
-	isDaemon bool
-	verbose  bool
-	kill     bool
+	cfgFile   string
+	isDaemon  bool
+	verbose   bool
+	kill      bool
+	containerName string
 )
 
 var rootCmd = &cobra.Command{
@@ -29,26 +34,20 @@ var rootCmd = &cobra.Command{
 
 		// 1. Handle Kill Flag
 		if kill {
-			if pidData, err := os.ReadFile(pidFile); err == nil {
-				pid, _ := strconv.Atoi(string(pidData))
-				if isProcessRunning(pid) {
-					process, _ := os.FindProcess(pid)
-					if err := process.Signal(syscall.SIGTERM); err != nil {
-						fmt.Printf("Error killing process %d: %v\n", pid, err)
-					} else {
-						fmt.Printf("🧵 Threader (PID: %d) terminated.\n", pid)
-					}
-				} else {
-					fmt.Println("🧵 Threader is not running.")
-				}
-				_ = os.Remove(pidFile)
-			} else {
-				fmt.Println("🧵 No PID file found. Threader is likely not running.")
-			}
+			handleKill(pidFile)
 			return
 		}
 
-		// 2. Check if already running
+		// 2. Interactive Setup if no args and no containers
+		if len(os.Args) == 1 || (len(os.Args) == 2 && verbose) {
+			m := container.NewManager(config.DataDir())
+			list, _ := m.List()
+			if len(list) == 0 {
+				runInitialSetup(m)
+			}
+		}
+
+		// 3. Check if already running
 		if pidData, err := os.ReadFile(pidFile); err == nil {
 			pid, _ := strconv.Atoi(string(pidData))
 			if isProcessRunning(pid) {
@@ -57,52 +56,113 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		// 3. Handle Daemonization
+		// 4. Handle Daemonization
 		if !isDaemon && !verbose {
-			// Re-exec as daemon
-			daemonCmd := exec.Command(os.Args[0], "--daemon")
-			logFile, _ := os.OpenFile(filepath.Join(config.DataDir(), "threader.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-			daemonCmd.Stdout = logFile
-			daemonCmd.Stderr = logFile
-			
-			if err := daemonCmd.Start(); err != nil {
-				fmt.Printf("Error starting daemon: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Printf("🧵 Threader started in background (PID: %d)\n", daemonCmd.Process.Pid)
-			os.Exit(0)
+			daemonize()
+			return
 		}
 
-		// 4. Persistence Setup (Ensure systemd service exists)
+		// 5. Persistence Setup
 		if isDaemon {
 			if err := EnsurePersistence(); err != nil {
 				fmt.Printf("Warning: Could not configure persistence: %v\n", err)
 			}
 		}
 
-		// 5. Dependency Check (Tesseract)
+		// 6. Dependency Check (Tesseract)
 		if err := CheckAndInstallDependencies(); err != nil {
 			fmt.Printf("Warning: Dependency check failed: %v\n", err)
-			fmt.Println("OCR features may not work correctly until Tesseract is installed.")
 		}
 
-		// 6. Main process logic
-		if verbose {
-			fmt.Println("🧵 Threader is weaving (foreground mode)...")
-		}
-
-		// Save PID
-		_ = os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
-		defer os.Remove(pidFile)
-
-		// TODO: Implement the persistent agent loop here
-		fmt.Println("🧵 Threader daemon is active.")
-		
-		// For now, just keep it alive if it's the daemon
-		if isDaemon {
-			select {} // Hang forever
-		}
+		// 7. Main process logic
+		startAgent()
 	},
+}
+
+func handleKill(pidFile string) {
+	if pidData, err := os.ReadFile(pidFile); err == nil {
+		pid, _ := strconv.Atoi(string(pidData))
+		if isProcessRunning(pid) {
+			process, _ := os.FindProcess(pid)
+			if err := process.Signal(syscall.SIGTERM); err != nil {
+				fmt.Printf("Error killing process %d: %v\n", pid, err)
+			} else {
+				fmt.Printf("🧵 Threader (PID: %d) terminated.\n", pid)
+			}
+		} else {
+			fmt.Println("🧵 Threader is not running.")
+		}
+		_ = os.Remove(pidFile)
+	} else {
+		fmt.Println("🧵 No PID file found.")
+	}
+}
+
+func daemonize() {
+	daemonCmd := exec.Command(os.Args[0], "--daemon")
+	logFile, _ := os.OpenFile(filepath.Join(config.DataDir(), "threader.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	daemonCmd.Stdout = logFile
+	daemonCmd.Stderr = logFile
+	
+	if err := daemonCmd.Start(); err != nil {
+		fmt.Printf("Error starting daemon: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("🧵 Threader started in background (PID: %d)\n", daemonCmd.Process.Pid)
+	os.Exit(0)
+}
+
+func runInitialSetup(m *container.Manager) {
+	fmt.Println("👋 Welcome to Threader! Let's set up your first container.")
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print("Enter Container Name (default: 'default'): ")
+	name, _ := reader.ReadString('\n')
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "default"
+	}
+
+	fmt.Print("Enter Container Description: ")
+	desc, _ := reader.ReadString('\n')
+	desc = strings.TrimSpace(desc)
+
+	c, err := m.Create(name, desc)
+	if err != nil {
+		fmt.Printf("Error creating container: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("🧵 Container %q created.\n", c.Name)
+
+	aiClient := ai.NewClient()
+	fmt.Print("Enter Threads Access Token: ")
+	token, _ := reader.ReadString('\n')
+	token = strings.TrimSpace(token)
+	if token != "" {
+		vaultKey := fmt.Sprintf("THREADS_TOKEN_%s", strings.ToUpper(c.Name))
+		_ = aiClient.VaultSet(vaultKey, token)
+		fmt.Printf("✅ Token saved to vault as %s\n", vaultKey)
+	}
+}
+
+func startAgent() {
+	if verbose {
+		fmt.Println("🧵 Threader is weaving (foreground mode)...")
+	}
+
+	_ = os.WriteFile(config.PIDPath(), []byte(strconv.Itoa(os.Getpid())), 0644)
+	
+	m := container.NewManager(config.DataDir())
+	active, err := m.GetDefault()
+	if err == nil {
+		fmt.Printf("🧵 Active Container: %s\n", active.Name)
+	}
+
+	fmt.Println("🧵 Threader daemon is active.")
+	if isDaemon {
+		select {}
+	}
 }
 
 func isProcessRunning(pid int) bool {

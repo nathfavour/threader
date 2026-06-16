@@ -34,7 +34,7 @@ func (s *Synthesizer) CraftPost(ctx context.Context, p *project.Project, assets 
 		MarketingBlueprint, p.Name, p.Description, p.BrandVoice, p.WebsiteURL, p.CodebaseURL, goal, mediaContext.String(),
 	)
 
-	return s.AI.Query(prompt, "vibe")
+	return s.AI.Query(prompt, "vibe", "github-models", "")
 }
 
 func (s *Synthesizer) CraftReply(ctx context.Context, p *project.Project, threadContent string, assets []*media.Asset) (string, error) {
@@ -50,5 +50,5 @@ func (s *Synthesizer) CraftReply(ctx context.Context, p *project.Project, thread
 		MarketingBlueprint, p.Name, p.BrandVoice, p.WebsiteURL, p.CodebaseURL, threadContent, mediaContext.String(),
 	)
 
-	return s.AI.Query(prompt, "vibe")
+	return s.AI.Query(prompt, "vibe", "github-models", "")
 }

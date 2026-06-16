@@ -25,8 +25,10 @@ type Response struct {
 }
 
 type QueryPayload struct {
-	Content string `json:"content"`
-	Intent  string `json:"intent,omitempty"`
+	Content  string `json:"content"`
+	Intent   string `json:"intent,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
 }
 
 type Client struct {
@@ -132,10 +134,12 @@ func (c *Client) call(method string, payload interface{}) (json.RawMessage, erro
 	return nil, fmt.Errorf("no response from vibeauracle")
 }
 
-func (c *Client) Query(content string, intent string) (string, error) {
+func (c *Client) Query(content string, intent string, provider string, model string) (string, error) {
 	payload := QueryPayload{
-		Content: content,
-		Intent:  intent,
+		Content:  content,
+		Intent:   intent,
+		Provider: provider,
+		Model:    model,
 	}
 	raw, err := c.call("query", payload)
 	if err != nil {

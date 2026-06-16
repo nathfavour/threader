@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -81,7 +80,13 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		// 5. Main process logic
+		// 5. Dependency Check (Tesseract)
+		if err := CheckAndInstallDependencies(); err != nil {
+			fmt.Printf("Warning: Dependency check failed: %v\n", err)
+			fmt.Println("OCR features may not work correctly until Tesseract is installed.")
+		}
+
+		// 6. Main process logic
 		if verbose {
 			fmt.Println("🧵 Threader is weaving (foreground mode)...")
 		}

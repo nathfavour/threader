@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,10 +10,13 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/nathfavour/threader/internal/ai"
 	"github.com/nathfavour/threader/internal/container"
+	"github.com/nathfavour/threader/internal/threads"
 	"github.com/nathfavour/threader/pkg/config"
+	"github.com/nathfavour/threader/pkg/spine"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -159,7 +163,19 @@ func startAgent() {
 		fmt.Printf("🧵 Active Container: %s\n", active.Name)
 	}
 
+	// Initialize Spine
+	s := spine.NewSpine(30 * time.Second)
+	
+	// Attach Cells
+	aiClient := ai.NewClient()
+	marketingCell := threads.NewMarketingCell(aiClient)
+	s.Attach(marketingCell)
+
 	fmt.Println("🧵 Threader daemon is active.")
+	
+	ctx := context.Background()
+	go s.Breathes(ctx)
+
 	if isDaemon {
 		select {}
 	}

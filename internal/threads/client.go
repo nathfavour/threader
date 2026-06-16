@@ -57,4 +57,58 @@ func (c *Client) CreateTextPost(text string) (string, error) {
 	return result.ID, nil
 }
 
-// Add more methods for Image, Video, Carousel as documented in SKILL.md
+func (c *Client) CreateImageContainer(imageURL, text string) (string, error) {
+	url := fmt.Sprintf("%s/me/threads", BaseURL)
+	payload := map[string]string{
+		"media_type": "IMAGE",
+		"image_url":  imageURL,
+		"text":       text,
+	}
+
+	data, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.AccessToken)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	return result.ID, nil
+}
+
+func (c *Client) PublishContainer(containerID string) (string, error) {
+	url := fmt.Sprintf("%s/me/threads_publish", BaseURL)
+	payload := map[string]string{
+		"creation_id": containerID,
+	}
+
+	data, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.AccessToken)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	return result.ID, nil
+}

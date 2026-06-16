@@ -17,6 +17,8 @@ type Asset struct {
 	OCRText    string    `json:"ocr_text"`
 	AISummary  string    `json:"ai_summary"`
 	UploadedAt time.Time `json:"uploaded_at"`
+	Posted     bool      `json:"posted"`
+	ThreadID   string    `json:"thread_id"`
 }
 
 type Engine struct {

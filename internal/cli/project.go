@@ -15,6 +15,8 @@ func init() {
 
 	projectCreateCmd.Flags().String("desc", "", "Project description")
 	projectCreateCmd.Flags().String("voice", "", "Brand voice")
+	projectCreateCmd.Flags().String("site", "", "Website URL")
+	projectCreateCmd.Flags().String("code", "", "Codebase URL (if open source)")
 }
 
 var projectCmd = &cobra.Command{
@@ -30,8 +32,10 @@ var projectCreateCmd = &cobra.Command{
 		reg, _ := project.NewRegistry(config.ProjectsPath())
 		desc, _ := cmd.Flags().GetString("desc")
 		voice, _ := cmd.Flags().GetString("voice")
+		site, _ := cmd.Flags().GetString("site")
+		code, _ := cmd.Flags().GetString("code")
 
-		p, err := reg.Register(args[0], desc, voice)
+		p, err := reg.Register(args[0], desc, voice, site, code)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return

@@ -30,8 +30,8 @@ func (s *Synthesizer) CraftPost(ctx context.Context, p *project.Project, assets 
 	}
 
 	prompt := fmt.Sprintf(
-		"%s\n\n### PROJECT CONTEXT\nName: %s\nDescription: %s\nBrand Voice: %s\n\n### TASK\nGoal: %s\nMedia Context: %s\n\n### INSTRUCTION\nCraft a post following the Blueprint rules above. Be extremely concise. Use the media content to inform your writing but do not describe it. Final output should be the raw post text only.",
-		MarketingBlueprint, p.Name, p.Description, p.BrandVoice, goal, mediaContext.String(),
+		"%s\n\n### PROJECT CONTEXT\nName: %s\nDescription: %s\nBrand Voice: %s\nWebsite: %s\nCodebase: %s\n\n### TASK\nGoal: %s\nMedia Context: %s\n\n### INSTRUCTION\nCraft a post following the Blueprint rules above. Be extremely concise. Use the media content to inform your writing but do not describe it. Final output should be the raw post text only.",
+		MarketingBlueprint, p.Name, p.Description, p.BrandVoice, p.WebsiteURL, p.CodebaseURL, goal, mediaContext.String(),
 	)
 
 	return s.AI.Query(prompt, "vibe")
@@ -46,8 +46,8 @@ func (s *Synthesizer) CraftReply(ctx context.Context, p *project.Project, thread
 	}
 
 	prompt := fmt.Sprintf(
-		"%s\n\n### PROJECT CONTEXT\nName: %s\nBrand Voice: %s\n\n### THREAD TO REPLY TO\n%s\n\n### MY ASSETS\n%s\n\n### INSTRUCTION\nCraft a human-like reply following the Blueprint rules. Be high-signal and low-noise. Do not market. Use my assets ONLY if they provide value to the conversation. Redirect to profile for more info. Raw reply text only.",
-		MarketingBlueprint, p.Name, p.BrandVoice, threadContent, mediaContext.String(),
+		"%s\n\n### PROJECT CONTEXT\nName: %s\nBrand Voice: %s\nWebsite: %s\nCodebase: %s\n\n### THREAD TO REPLY TO\n%s\n\n### MY ASSETS\n%s\n\n### INSTRUCTION\nCraft a human-like reply following the Blueprint rules. Be high-signal and low-noise. Do not market. Use my assets ONLY if they provide value to the conversation. Redirect to profile for more info. Raw reply text only.",
+		MarketingBlueprint, p.Name, p.BrandVoice, p.WebsiteURL, p.CodebaseURL, threadContent, mediaContext.String(),
 	)
 
 	return s.AI.Query(prompt, "vibe")

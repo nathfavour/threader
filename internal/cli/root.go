@@ -14,6 +14,7 @@ import (
 
 	"github.com/nathfavour/threader/internal/ai"
 	"github.com/nathfavour/threader/internal/container"
+	"github.com/nathfavour/threader/internal/project"
 	"github.com/nathfavour/threader/internal/threads"
 	"github.com/nathfavour/threader/pkg/config"
 	"github.com/nathfavour/threader/pkg/spine"
@@ -117,17 +118,17 @@ func daemonize() {
 }
 
 func runInitialSetup(m *container.Manager) {
-	fmt.Println("👋 Welcome to Threader! Let's set up your first container.")
+	fmt.Println("👋 Welcome to Threader! Let's set up your first personality and project.")
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Print("Enter Container Name (default: 'default'): ")
+	fmt.Print("Enter Persona Name (default: 'default'): ")
 	name, _ := reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = "default"
 	}
 
-	fmt.Print("Enter Container Description: ")
+	fmt.Print("Enter Persona Description: ")
 	desc, _ := reader.ReadString('\n')
 	desc = strings.TrimSpace(desc)
 
@@ -137,10 +138,39 @@ func runInitialSetup(m *container.Manager) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("🧵 Container %q created.\n", c.Name)
+	fmt.Printf("🧵 Personality %q created.\n", c.Name)
+
+	// Create initial project
+	fmt.Println("\n--- Initial Project Setup ---")
+	fmt.Print("Enter Project Name (e.g. MyProduct): ")
+	projName, _ := reader.ReadString('\n')
+	projName = strings.TrimSpace(projName)
+	if projName == "" {
+		projName = name // Fallback to container name
+	}
+
+	fmt.Print("Enter Brand Voice (e.g. casual, professional): ")
+	voice, _ := reader.ReadString('\n')
+	voice = strings.TrimSpace(voice)
+
+	fmt.Print("Enter Website URL: ")
+	site, _ := reader.ReadString('\n')
+	site = strings.TrimSpace(site)
+
+	fmt.Print("Enter Codebase URL (optional, for Open Source): ")
+	code, _ := reader.ReadString('\n')
+	code = strings.TrimSpace(code)
+
+	reg, _ := project.NewRegistry(config.ProjectsPath())
+	p, err := reg.Register(projName, desc, voice, site, code)
+	if err != nil {
+		fmt.Printf("Error creating project: %v\n", err)
+	} else {
+		fmt.Printf("✅ Project %q initialized.\n", p.Name)
+	}
 
 	aiClient := ai.NewClient()
-	fmt.Print("Enter Threads Access Token: ")
+	fmt.Print("\nEnter Threads Access Token: ")
 	token, _ := reader.ReadString('\n')
 	token = strings.TrimSpace(token)
 	if token != "" {

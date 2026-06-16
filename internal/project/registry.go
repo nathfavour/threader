@@ -15,6 +15,8 @@ type Project struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	BrandVoice  string    `json:"brand_voice"`
+	WebsiteURL  string    `json:"website_url,omitempty"`
+	CodebaseURL string    `json:"codebase_url,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -47,7 +49,7 @@ func NewRegistry(dataPath string) (*Registry, error) {
 	return r, nil
 }
 
-func (r *Registry) Register(name, desc, voice string) (*Project, error) {
+func (r *Registry) Register(name, desc, voice, site, code string) (*Project, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -56,6 +58,8 @@ func (r *Registry) Register(name, desc, voice string) (*Project, error) {
 		Name:        name,
 		Description: desc,
 		BrandVoice:  voice,
+		WebsiteURL:  site,
+		CodebaseURL: code,
 		CreatedAt:   time.Now(),
 	}
 

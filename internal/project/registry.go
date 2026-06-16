@@ -2,6 +2,7 @@ package project
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -72,6 +73,16 @@ func (r *Registry) Get(id string) (*Project, bool) {
 	defer r.mu.RUnlock()
 	p, ok := r.projects[id]
 	return p, ok
+}
+
+func (r *Registry) List() []*Project {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	list := make([]*Project, 0, len(r.projects))
+	for _, p := range r.projects {
+		list = append(list, p)
+	}
+	return list
 }
 
 func (r *Registry) Update(id string, name, desc, voice, site, code string) (*Project, error) {

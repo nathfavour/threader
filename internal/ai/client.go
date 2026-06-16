@@ -170,3 +170,24 @@ func (c *Client) Embed(content string) ([]float64, error) {
 
 	return result, nil
 }
+
+func (c *Client) VaultGet(key string) (string, error) {
+	raw, err := c.call("vault_get", map[string]string{"key": key})
+	if err != nil {
+		return "", err
+	}
+
+	var result struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return "", err
+	}
+
+	return result.Value, nil
+}
+
+func (c *Client) VaultSet(key, value string) error {
+	_, err := c.call("vault_set", map[string]string{"key": key, "value": value})
+	return err
+}

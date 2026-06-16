@@ -1,0 +1,24 @@
+{
+  "name": "threader",
+  "version": "0.1.0",
+  "description": "Autonomous agentic system for Meta Threads marketing.",
+  "repository": "github.com/nathfavour/threader",
+  "source_dir": "~/.threader/source",
+  "install_dir": "~/.local/bin",
+  "build": {
+    "steps": [
+      "make build"
+    ],
+    "bin": "threader",
+    "toolchain": "go"
+  },
+  "runtime": {
+    "dependencies": [
+      "libtesseract-dev",
+      "libleptonica-dev",
+      "tesseract-ocr"
+    ],
+    "daemon": true,
+    "pulse": true
+  }
+}

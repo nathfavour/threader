@@ -6,10 +6,14 @@ import (
 )
 
 func DataDir() string {
-	home, _ := os.UserHomeDir()
-	path := filepath.Join(home, ".threader")
+	dir, _ := os.UserConfigDir()
+	path := filepath.Join(dir, "threader")
 	_ = os.MkdirAll(path, 0755)
 	return path
+}
+
+func PIDPath() string {
+	return filepath.Join(DataDir(), "threader.pid")
 }
 
 func ProjectsPath() string {

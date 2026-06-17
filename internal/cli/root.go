@@ -235,32 +235,14 @@ func runInitialSetup(m *container.Manager) {
 	}
 
 	aiClient := ai.NewClient()
-	fmt.Println("\n--- Threads API Configuration ---")
-	
-	fmt.Print("Enter Threads Client ID: ")
-	clientID, _ := reader.ReadString('\n')
-	clientID = strings.TrimSpace(clientID)
-	
-	fmt.Print("Enter Threads Client Secret: ")
-	clientSecret, _ := reader.ReadString('\n')
-	clientSecret = strings.TrimSpace(clientSecret)
-
-	fmt.Print("Enter Threads Redirect URI: ")
-	redirectURI, _ := reader.ReadString('\n')
-	redirectURI = strings.TrimSpace(redirectURI)
-
-	fmt.Print("Enter Threads Access Token: ")
+	fmt.Print("\nEnter Threads Access Token: ")
 	token, _ := reader.ReadString('\n')
 	token = strings.TrimSpace(token)
 
 	if token != "" {
 		// Use Project ID for vault keys to ensure per-project configuration
 		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID), token)
-		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_CLIENT_ID_%s", p.ID), clientID)
-		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_CLIENT_SECRET_%s", p.ID), clientSecret)
-		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_REDIRECT_URI_%s", p.ID), redirectURI)
-		
-		fmt.Printf("✅ Configuration saved to vault for project %s\n", p.Name)
+		fmt.Printf("✅ Token saved to vault for project %s\n", p.Name)
 	}
 }
 

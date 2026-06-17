@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nathfavour/threader/internal/ai"
+	"github.com/nathfavour/threader/internal/media"
 	"github.com/nathfavour/threader/internal/project"
 	"github.com/nathfavour/threader/internal/synthesis"
 	"github.com/nathfavour/threader/internal/threads"
@@ -24,8 +26,10 @@ func init() {
 	postCraftCmd.Flags().String("goal", "", "Goal for the post")
 	postCraftCmd.Flags().String("manual", "", "Manually provide post content")
 	postCraftCmd.Flags().Lookup("manual").NoOptDefVal = "PROMPT"
+	postCraftCmd.Flags().String("media", "", "Path to media file (image/video)")
 
 	postPublishCmd.Flags().StringP("project", "p", "", "Project ID or Name (defaults to first project)")
+	postPublishCmd.Flags().String("media", "", "Path to media file")
 }
 
 var postCmd = &cobra.Command{
@@ -40,6 +44,7 @@ var postCraftCmd = &cobra.Command{
 		projectID, _ := cmd.Flags().GetString("project")
 		goal, _ := cmd.Flags().GetString("goal")
 		manual, _ := cmd.Flags().GetString("manual")
+		mediaPath, _ := cmd.Flags().GetString("media")
 
 		reg, _ := project.NewRegistry(config.ProjectsPath())
 		projects := reg.List()
@@ -65,6 +70,28 @@ var postCraftCmd = &cobra.Command{
 			return
 		}
 
+		var asset *media.Asset
+		if mediaPath != "" {
+			// Resolve absolute path
+			absPath, err := filepath.Abs(mediaPath)
+			if err != nil {
+				fmt.Printf("Error resolving media path: %v\n", err)
+				return
+			}
+			
+			if _, err := os.Stat(absPath); os.IsNotExist(err) {
+				fmt.Printf("Error: Media file %q does not exist.\n", absPath)
+				return
+			}
+
+			fmt.Printf("🧵 Indexing media %q...\n", filepath.Base(absPath))
+			engine := media.NewEngine(config.MediaDir())
+			asset, err = engine.IndexMedia(p.ID, absPath)
+			if err != nil {
+				fmt.Printf("Warning: Media indexing failed: %v\n", err)
+			}
+		}
+
 		var postText string
 		if cmd.Flags().Changed("manual") {
 			if manual == "PROMPT" {
@@ -83,8 +110,13 @@ var postCraftCmd = &cobra.Command{
 				goal = "Create an engaging post about this project."
 			}
 
+			var assets []*media.Asset
+			if asset != nil {
+				assets = append(assets, asset)
+			}
+
 			fmt.Printf("🧵 Crafting AI post for project %q...\n", p.Name)
-			resp, err := synth.CraftPost(context.Background(), p, nil, goal)
+			resp, err := synth.CraftPost(context.Background(), p, assets, goal)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				return
@@ -93,6 +125,9 @@ var postCraftCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n--- Crafted Post ---")
+		if asset != nil {
+			fmt.Printf("[Media: %s]\n", asset.FilePath)
+		}
 		fmt.Println(postText)
 		fmt.Println("--------------------")
 		
@@ -100,7 +135,7 @@ var postCraftCmd = &cobra.Command{
 		reader := bufio.NewReader(os.Stdin)
 		ans, _ := reader.ReadString('\n')
 		if strings.ToLower(strings.TrimSpace(ans)) == "y" {
-			publishToProject(p, postText)
+			publishToProject(p, postText, asset)
 		}
 	},
 }
@@ -110,6 +145,7 @@ var postPublishCmd = &cobra.Command{
 	Short: "Publish a post to Threads",
 	Run: func(cmd *cobra.Command, args []string) {
 		projectID, _ := cmd.Flags().GetString("project")
+		mediaPath, _ := cmd.Flags().GetString("media")
 		
 		reg, _ := project.NewRegistry(config.ProjectsPath())
 		projects := reg.List()
@@ -135,6 +171,13 @@ var postPublishCmd = &cobra.Command{
 			return
 		}
 
+		var asset *media.Asset
+		if mediaPath != "" {
+			absPath, _ := filepath.Abs(mediaPath)
+			engine := media.NewEngine(config.MediaDir())
+			asset, _ = engine.IndexMedia(p.ID, absPath)
+		}
+
 		var text string
 		if len(args) > 0 {
 			text = args[0]
@@ -145,23 +188,47 @@ var postPublishCmd = &cobra.Command{
 			text = strings.TrimSpace(text)
 		}
 
-		if text == "" {
-			fmt.Println("Error: Cannot publish empty post.")
-			return
-		}
-
-		publishToProject(p, text)
+		publishToProject(p, text, asset)
 	},
 }
 
-func publishToProject(p *project.Project, text string) {
+func publishToProject(p *project.Project, text string, asset *media.Asset) {
 	if p.AccessToken == "" {
 		fmt.Printf("Error: Threads token not found for project %q.\n", p.Name)
 		return
 	}
 
 	client := threads.NewClient(p.AccessToken)
-	id, err := client.CreateTextPost(text)
+	
+	var id string
+	var err error
+
+	if asset != nil {
+		fmt.Printf("🧵 Uploading media for project %q...\n", p.Name)
+		// NOTE: Threads requires media to be publicly accessible. 
+		// We assume the FilePath is a URL here or that the user has handled hosting.
+		// For local files, we might need a hosting proxy or warning.
+		
+		ext := strings.ToLower(filepath.Ext(asset.FilePath))
+		if ext == ".mp4" || ext == ".mov" {
+			// Video publishing logic
+			// In a real scenario, we'd wait for container status to be 'FINISHED'
+			fmt.Println("⚠️  Video publishing requires public URL and processing time.")
+			id, err = client.CreateTextPost(text) // Fallback for now
+		} else {
+			// Image publishing logic
+			// Container creation for image
+			containerID, err := client.CreateImageContainer(asset.FilePath, text)
+			if err != nil {
+				fmt.Printf("Error creating image container: %v\n", err)
+				return
+			}
+			id, err = client.PublishContainer(containerID)
+		}
+	} else {
+		id, err = client.CreateTextPost(text)
+	}
+
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return

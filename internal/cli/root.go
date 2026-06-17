@@ -48,21 +48,41 @@ var rootCmd = &cobra.Command{
 		m := container.NewManager(config.DataDir())
 		reg, _ := project.NewRegistry(config.ProjectsPath())
 		
-		list, _ := m.List()
-		if len(list) == 0 {
-			runInitialSetup(m)
-		}
-
 		selectedProject := validateAndSelectProject(m, reg, targetProject)
 		if selectedProject == nil {
-			fmt.Println("⚠️  No project with a valid Threads token found.")
-			fmt.Println("   Please run 'threader config set-token [token]' or re-run setup.")
-			fmt.Print("   Do you want to run setup now? (y/N): ")
-			reader := bufio.NewReader(os.Stdin)
-			ans, _ := reader.ReadString('\n')
-			if strings.ToLower(strings.TrimSpace(ans)) == "y" {
+			list, _ := m.List()
+			projects := reg.List()
+
+			if len(list) == 0 && len(projects) == 0 {
 				runInitialSetup(m)
 				selectedProject = validateAndSelectProject(m, reg, targetProject)
+			} else {
+				fmt.Println("⚠️  No project with a valid Threads token found.")
+				fmt.Println("--- Project Configuration ---")
+				if len(projects) > 0 {
+					fmt.Println("Existing projects found:")
+					for i, p := range projects {
+						fmt.Printf("%d) %s (%s)\n", i+1, p.Name, p.ID)
+					}
+					fmt.Printf("%d) Create new persona/project\n", len(projects)+1)
+					fmt.Print("Select an option (index): ")
+					
+					reader := bufio.NewReader(os.Stdin)
+					choice, _ := reader.ReadString('\n')
+					choice = strings.TrimSpace(choice)
+					idx, err := strconv.Atoi(choice)
+					
+					if err == nil && idx >= 1 && idx <= len(projects) {
+						configureProject(projects[idx-1])
+						selectedProject = projects[idx-1]
+					} else if choice == "" || idx == len(projects)+1 {
+						runInitialSetup(m)
+						selectedProject = validateAndSelectProject(m, reg, targetProject)
+					}
+				} else {
+					runInitialSetup(m)
+					selectedProject = validateAndSelectProject(m, reg, targetProject)
+				}
 			}
 			
 			if selectedProject == nil {
@@ -138,40 +158,66 @@ func daemonize() {
 	os.Exit(0)
 }
 
+func configureProject(p *project.Project) {
+	fmt.Printf("\n--- Configuring Project: %s ---\n", p.Name)
+	reader := bufio.NewReader(os.Stdin)
+	aiClient := ai.NewClient()
+
+	fmt.Print("Enter Threads Access Token: ")
+	token, _ := reader.ReadString('\n')
+	token = strings.TrimSpace(token)
+
+	if token != "" {
+		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID), token)
+		fmt.Printf("✅ Token saved to vault for project %s\n", p.Name)
+	}
+}
+
 func runInitialSetup(m *container.Manager) {
 	fmt.Println("👋 Welcome to Threader! Let's set up your personality and project.")
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Print("Enter Persona Name (default: 'default'): ")
-	name, _ := reader.ReadString('\n')
-	name = strings.TrimSpace(name)
-	if name == "" {
-		name = "default"
-	}
-
-	var c *container.Container
-	var err error
-	
 	list, _ := m.List()
-	for _, exist := range list {
-		if exist.Name == name {
-			c = exist
-			fmt.Printf("🧵 Using existing personality %q.\n", c.Name)
-			break
+	var c *container.Container
+
+	if len(list) > 0 {
+		fmt.Println("\n--- Existing Personas ---")
+		for i, persona := range list {
+			fmt.Printf("%d) %s\n", i+1, persona.Name)
+		}
+		fmt.Printf("%d) Create new persona\n", len(list)+1)
+		fmt.Print("Select a persona (default: 1): ")
+		choice, _ := reader.ReadString('\n')
+		choice = strings.TrimSpace(choice)
+		idx, err := strconv.Atoi(choice)
+		if choice == "" {
+			c = list[0]
+		} else if err == nil && idx >= 1 && idx <= len(list) {
+			c = list[idx-1]
 		}
 	}
 
 	if c == nil {
+		fmt.Print("Enter Persona Name (default: 'default'): ")
+		name, _ := reader.ReadString('\n')
+		name = strings.TrimSpace(name)
+		if name == "" {
+			name = "default"
+		}
+
 		fmt.Print("Enter Persona Description: ")
 		desc, _ := reader.ReadString('\n')
 		desc = strings.TrimSpace(desc)
 
+		var err error
 		c, err = m.Create(name, desc)
 		if err != nil {
 			fmt.Printf("Error creating container: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Printf("🧵 Personality %q created.\n", c.Name)
+	} else {
+		fmt.Printf("🧵 Using personality %q.\n", c.Name)
 	}
 
 	reg, _ := project.NewRegistry(config.ProjectsPath())
@@ -202,11 +248,7 @@ func runInitialSetup(m *container.Manager) {
 		// Create initial project
 		fmt.Println("\n--- Initial Project Setup ---")
 		
-		defaultProjName := name
-		if len(projects) > 0 {
-			defaultProjName = projects[0].Name
-		}
-
+		defaultProjName := c.Name
 		fmt.Printf("Enter Project Name (default: %q): ", defaultProjName)
 		projName, _ := reader.ReadString('\n')
 		projName = strings.TrimSpace(projName)
@@ -226,6 +268,7 @@ func runInitialSetup(m *container.Manager) {
 		code, _ := reader.ReadString('\n')
 		code = strings.TrimSpace(code)
 
+		var err error
 		p, err = reg.Register(projName, c.Description, voice, site, code)
 		if err != nil {
 			fmt.Printf("Error creating project: %v\n", err)
@@ -234,16 +277,7 @@ func runInitialSetup(m *container.Manager) {
 		fmt.Printf("✅ Project %q initialized.\n", p.Name)
 	}
 
-	aiClient := ai.NewClient()
-	fmt.Print("\nEnter Threads Access Token: ")
-	token, _ := reader.ReadString('\n')
-	token = strings.TrimSpace(token)
-
-	if token != "" {
-		// Use Project ID for vault keys to ensure per-project configuration
-		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID), token)
-		fmt.Printf("✅ Token saved to vault for project %s\n", p.Name)
-	}
+	configureProject(p)
 }
 
 func validateAndSelectProject(m *container.Manager, reg *project.Registry, target string) *project.Project {

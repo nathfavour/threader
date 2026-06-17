@@ -204,21 +204,43 @@ func publishToProject(p *project.Project, text string, asset *media.Asset) {
 	var err error
 
 	if asset != nil {
-		fmt.Printf("🧵 Uploading media for project %q...\n", p.Name)
-		// NOTE: Threads requires media to be publicly accessible. 
-		// We assume the FilePath is a URL here or that the user has handled hosting.
-		// For local files, we might need a hosting proxy or warning.
+		fmt.Printf("🧵 Preparing media for project %q...\n", p.Name)
 		
+		mediaURL := asset.FilePath
+		var cleanup func()
+
+		// If it's a local file, set up transient hosting
+		if !strings.HasPrefix(asset.FilePath, "http") {
+			fmt.Println("🧵 Starting transient hosting via Pinggy...")
+			u, c, err := threads.HostLocalFile(asset.FilePath)
+			if err != nil {
+				fmt.Printf("Error setting up transient hosting: %v\n", err)
+				return
+			}
+			mediaURL = u
+			cleanup = c
+			fmt.Printf("🧵 Media temporarily hosted at: %s\n", mediaURL)
+		}
+
+		if cleanup != nil {
+			defer cleanup()
+		}
+
 		ext := strings.ToLower(filepath.Ext(asset.FilePath))
 		if ext == ".mp4" || ext == ".mov" {
 			// Video publishing logic
-			// In a real scenario, we'd wait for container status to be 'FINISHED'
-			fmt.Println("⚠️  Video publishing requires public URL and processing time.")
-			id, err = client.CreateTextPost(text) // Fallback for now
+			fmt.Println("⚠️  Video publishing requires processing time on Meta servers.")
+			// Note: For videos, Step 1 creates a container, but we might need to poll for status.
+			// Simple implementation for now.
+			containerID, err := client.CreateImageContainer(mediaURL, text) // Reuse container logic for now if possible or update Client
+			if err != nil {
+				fmt.Printf("Error creating media container: %v\n", err)
+				return
+			}
+			id, err = client.PublishContainer(containerID)
 		} else {
 			// Image publishing logic
-			// Container creation for image
-			containerID, err := client.CreateImageContainer(asset.FilePath, text)
+			containerID, err := client.CreateImageContainer(mediaURL, text)
 			if err != nil {
 				fmt.Printf("Error creating image container: %v\n", err)
 				return

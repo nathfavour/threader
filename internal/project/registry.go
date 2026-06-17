@@ -18,6 +18,7 @@ type Project struct {
 	BrandVoice  string    `json:"brand_voice"`
 	WebsiteURL  string    `json:"website_url,omitempty"`
 	CodebaseURL string    `json:"codebase_url,omitempty"`
+	AccessToken string    `json:"access_token,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 

@@ -168,8 +168,13 @@ func configureProject(p *project.Project) {
 	token = strings.TrimSpace(token)
 
 	if token != "" {
-		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID), token)
-		fmt.Printf("✅ Token saved to vault for project %s\n", p.Name)
+		err := aiClient.VaultSet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID), token)
+		if err != nil {
+			fmt.Printf("❌ Error saving to vault: %v\n", err)
+			fmt.Println("   Ensure 'vibeauracle' is running.")
+		} else {
+			fmt.Printf("✅ Token saved to vault for project %s\n", p.Name)
+		}
 	}
 }
 

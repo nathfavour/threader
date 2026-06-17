@@ -23,11 +23,12 @@ import (
 )
 
 var (
-	cfgFile   string
-	isDaemon  bool
-	verbose   bool
-	kill      bool
+	cfgFile       string
+	isDaemon      bool
+	verbose       bool
+	kill          bool
 	containerName string
+	targetProject string
 )
 
 var rootCmd = &cobra.Command{
@@ -43,14 +44,22 @@ var rootCmd = &cobra.Command{
 			return
 		}
 
-		// 2. Interactive Setup if no args and no containers
-		if len(os.Args) == 1 || (len(os.Args) == 2 && verbose) {
-			m := container.NewManager(config.DataDir())
-			list, _ := m.List()
-			if len(list) == 0 {
-				runInitialSetup(m)
+		// 2. Validate Configs and Setup
+		m := container.NewManager(config.DataDir())
+		reg, _ := project.NewRegistry(config.ProjectsPath())
+		
+		selectedProject := validateAndSelectProject(m, reg, targetProject)
+		if selectedProject == nil {
+			runInitialSetup(m)
+			// Re-check after setup
+			selectedProject = validateAndSelectProject(m, reg, targetProject)
+			if selectedProject == nil {
+				fmt.Println("❌ Could not resolve a valid project configuration. Exiting.")
+				os.Exit(1)
 			}
 		}
+
+		fmt.Printf("🧵 Using project: %s\n", selectedProject.Name)
 
 		// 3. Check if already running
 		if pidData, err := os.ReadFile(pidFile); err == nil {
@@ -80,7 +89,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		// 7. Main process logic
-		startAgent()
+		startAgent(selectedProject)
 	},
 }
 
@@ -118,7 +127,7 @@ func daemonize() {
 }
 
 func runInitialSetup(m *container.Manager) {
-	fmt.Println("👋 Welcome to Threader! Let's set up your first personality and project.")
+	fmt.Println("👋 Welcome to Threader! Let's set up your personality and project.")
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Print("Enter Persona Name (default: 'default'): ")
@@ -128,17 +137,30 @@ func runInitialSetup(m *container.Manager) {
 		name = "default"
 	}
 
-	fmt.Print("Enter Persona Description: ")
-	desc, _ := reader.ReadString('\n')
-	desc = strings.TrimSpace(desc)
-
-	c, err := m.Create(name, desc)
-	if err != nil {
-		fmt.Printf("Error creating container: %v\n", err)
-		os.Exit(1)
+	var c *container.Container
+	var err error
+	
+	list, _ := m.List()
+	for _, exist := range list {
+		if exist.Name == name {
+			c = exist
+			fmt.Printf("🧵 Using existing personality %q.\n", c.Name)
+			break
+		}
 	}
 
-	fmt.Printf("🧵 Personality %q created.\n", c.Name)
+	if c == nil {
+		fmt.Print("Enter Persona Description: ")
+		desc, _ := reader.ReadString('\n')
+		desc = strings.TrimSpace(desc)
+
+		c, err = m.Create(name, desc)
+		if err != nil {
+			fmt.Printf("Error creating container: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("🧵 Personality %q created.\n", c.Name)
+	}
 
 	reg, _ := project.NewRegistry(config.ProjectsPath())
 	projects := reg.List()
@@ -165,11 +187,17 @@ func runInitialSetup(m *container.Manager) {
 	if !useExisting {
 		// Create initial project
 		fmt.Println("\n--- Initial Project Setup ---")
-		fmt.Print("Enter Project Name (e.g. MyProduct): ")
+		
+		defaultProjName := name
+		if len(projects) > 0 {
+			defaultProjName = projects[0].Name
+		}
+
+		fmt.Printf("Enter Project Name (default: %q): ", defaultProjName)
 		projName, _ := reader.ReadString('\n')
 		projName = strings.TrimSpace(projName)
 		if projName == "" {
-			projName = name // Fallback to container name
+			projName = defaultProjName
 		}
 
 		fmt.Print("Enter Brand Voice (e.g. casual, professional): ")
@@ -184,7 +212,7 @@ func runInitialSetup(m *container.Manager) {
 		code, _ := reader.ReadString('\n')
 		code = strings.TrimSpace(code)
 
-		p, err := reg.Register(projName, desc, voice, site, code)
+		p, err := reg.Register(projName, c.Description, voice, site, code)
 		if err != nil {
 			fmt.Printf("Error creating project: %v\n", err)
 		} else {
@@ -203,9 +231,78 @@ func runInitialSetup(m *container.Manager) {
 	}
 }
 
-func startAgent() {
+func validateAndSelectProject(m *container.Manager, reg *project.Registry, target string) *project.Project {
+	projects := reg.List()
+	if len(projects) == 0 {
+		return nil
+	}
+
+	aiClient := ai.NewClient()
+	
+	// Helper to check if a project is "valid"
+	// For now, valid means we have a token in vault for the default container
+	isValid := func(p *project.Project) bool {
+		active, err := m.GetDefault()
+		if err != nil {
+			return false
+		}
+		vaultKey := fmt.Sprintf("THREADS_TOKEN_%s", strings.ToUpper(active.Name))
+		token, err := aiClient.VaultGet(vaultKey)
+		return err == nil && token != ""
+	}
+
+	if target != "" {
+		for _, p := range projects {
+			if p.Name == target || p.ID == target {
+				if isValid(p) {
+					return p
+				}
+				fmt.Printf("⚠️  Project %q found but is not fully configured (missing token).\n", p.Name)
+				return nil
+			}
+		}
+		fmt.Printf("⚠️  Project %q not found.\n", target)
+		return nil
+	}
+
+	// Check default (first project)
+	if len(projects) > 0 && isValid(projects[0]) {
+		return projects[0]
+	}
+
+	// Search for any valid one
+	var validProjects []*project.Project
+	for _, p := range projects {
+		if isValid(p) {
+			validProjects = append(validProjects, p)
+		}
+	}
+
+	if len(validProjects) == 1 {
+		return validProjects[0]
+	}
+
+	if len(validProjects) > 1 {
+		fmt.Println("\n--- Multiple Configured Projects Found ---")
+		for i, p := range validProjects {
+			fmt.Printf("%d) %s\n", i+1, p.Name)
+		}
+		fmt.Print("Select project index to use: ")
+		reader := bufio.NewReader(os.Stdin)
+		choice, _ := reader.ReadString('\n')
+		choice = strings.TrimSpace(choice)
+		idx, err := strconv.Atoi(choice)
+		if err == nil && idx >= 1 && idx <= len(validProjects) {
+			return validProjects[idx-1]
+		}
+	}
+
+	return nil
+}
+
+func startAgent(p *project.Project) {
 	if verbose {
-		fmt.Println("🧵 Threader is weaving (foreground mode)...")
+		fmt.Printf("🧵 Threader is weaving for project %q (foreground mode)...\n", p.Name)
 	}
 
 	_ = os.WriteFile(config.PIDPath(), []byte(strconv.Itoa(os.Getpid())), 0644)
@@ -213,7 +310,7 @@ func startAgent() {
 	m := container.NewManager(config.DataDir())
 	active, err := m.GetDefault()
 	if err == nil {
-		fmt.Printf("🧵 Active Container: %s\n", active.Name)
+		fmt.Printf("🧵 Active Persona: %s\n", active.Name)
 	}
 
 	// Initialize Spine
@@ -222,6 +319,8 @@ func startAgent() {
 	// Attach Cells
 	aiClient := ai.NewClient()
 	marketingCell := threads.NewMarketingCell(aiClient)
+	marketingCell.TargetProjectID = p.ID
+	
 	s.Attach(marketingCell)
 
 	fmt.Println("🧵 Threader daemon is active.")
@@ -271,6 +370,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.threader.yaml)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output (run in foreground)")
 	rootCmd.PersistentFlags().BoolVarP(&kill, "kill", "k", false, "kill the running threader process")
+	rootCmd.PersistentFlags().StringVarP(&targetProject, "project", "p", "", "target project to run")
 	rootCmd.PersistentFlags().BoolVar(&isDaemon, "daemon", false, "internal daemon flag")
 	_ = rootCmd.PersistentFlags().MarkHidden("daemon")
 }

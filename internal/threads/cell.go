@@ -18,9 +18,10 @@ import (
 )
 
 type MarketingCell struct {
-	AI    *ai.Client
-	Synth *synthesis.Synthesizer
-	Quota *QuotaManager
+	AI              *ai.Client
+	Synth           *synthesis.Synthesizer
+	Quota           *QuotaManager
+	TargetProjectID string
 }
 
 func NewMarketingCell(aiClient *ai.Client) *MarketingCell {
@@ -54,6 +55,9 @@ func (c *MarketingCell) Pulse(ctx context.Context) error {
 	projects := reg.List()
 
 	for _, p := range projects {
+		if c.TargetProjectID != "" && p.ID != c.TargetProjectID && p.Name != c.TargetProjectID {
+			continue
+		}
 		if err := c.processProject(ctx, p, active); err != nil {
 			fmt.Printf("MarketingCell: Failed to process project %s: %v\n", p.Name, err)
 		}

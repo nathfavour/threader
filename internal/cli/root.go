@@ -140,33 +140,56 @@ func runInitialSetup(m *container.Manager) {
 
 	fmt.Printf("🧵 Personality %q created.\n", c.Name)
 
-	// Create initial project
-	fmt.Println("\n--- Initial Project Setup ---")
-	fmt.Print("Enter Project Name (e.g. MyProduct): ")
-	projName, _ := reader.ReadString('\n')
-	projName = strings.TrimSpace(projName)
-	if projName == "" {
-		projName = name // Fallback to container name
+	reg, _ := project.NewRegistry(config.ProjectsPath())
+	projects := reg.List()
+
+	useExisting := false
+	if len(projects) > 0 {
+		fmt.Println("\n--- Project Selection ---")
+		fmt.Printf("Found %d existing project(s):\n", len(projects))
+		for i, p := range projects {
+			fmt.Printf("%d) %s (%s)\n", i+1, p.Name, p.ID)
+		}
+		fmt.Print("Select a project index to link, or press Enter to create a new one: ")
+		choice, _ := reader.ReadString('\n')
+		choice = strings.TrimSpace(choice)
+		if choice != "" {
+			idx, err := strconv.Atoi(choice)
+			if err == nil && idx >= 1 && idx <= len(projects) {
+				fmt.Printf("✅ Linked to existing project: %s\n", projects[idx-1].Name)
+				useExisting = true
+			}
+		}
 	}
 
-	fmt.Print("Enter Brand Voice (e.g. casual, professional): ")
-	voice, _ := reader.ReadString('\n')
-	voice = strings.TrimSpace(voice)
+	if !useExisting {
+		// Create initial project
+		fmt.Println("\n--- Initial Project Setup ---")
+		fmt.Print("Enter Project Name (e.g. MyProduct): ")
+		projName, _ := reader.ReadString('\n')
+		projName = strings.TrimSpace(projName)
+		if projName == "" {
+			projName = name // Fallback to container name
+		}
 
-	fmt.Print("Enter Website URL: ")
-	site, _ := reader.ReadString('\n')
-	site = strings.TrimSpace(site)
+		fmt.Print("Enter Brand Voice (e.g. casual, professional): ")
+		voice, _ := reader.ReadString('\n')
+		voice = strings.TrimSpace(voice)
 
-	fmt.Print("Enter Codebase URL (optional, for Open Source): ")
-	code, _ := reader.ReadString('\n')
-	code = strings.TrimSpace(code)
+		fmt.Print("Enter Website URL: ")
+		site, _ := reader.ReadString('\n')
+		site = strings.TrimSpace(site)
 
-	reg, _ := project.NewRegistry(config.ProjectsPath())
-	p, err := reg.Register(projName, desc, voice, site, code)
-	if err != nil {
-		fmt.Printf("Error creating project: %v\n", err)
-	} else {
-		fmt.Printf("✅ Project %q initialized.\n", p.Name)
+		fmt.Print("Enter Codebase URL (optional, for Open Source): ")
+		code, _ := reader.ReadString('\n')
+		code = strings.TrimSpace(code)
+
+		p, err := reg.Register(projName, desc, voice, site, code)
+		if err != nil {
+			fmt.Printf("Error creating project: %v\n", err)
+		} else {
+			fmt.Printf("✅ Project %q initialized.\n", p.Name)
+		}
 	}
 
 	aiClient := ai.NewClient()

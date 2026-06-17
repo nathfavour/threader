@@ -43,14 +43,15 @@ func HostLocalFile(filePath string) (string, func(), error) {
 
 	// 2. Start Pinggy SSH Tunnel
 	// Command: ssh -p 443 -o StrictHostKeyChecking=no -R0:localhost:PORT a.pinggy.io
-	// We use -T to disable pseudo-terminal allocation and avoid interactive prompts if possible
-	cmd := exec.Command("ssh", "-p", "443", "-o", "StrictHostKeyChecking=no", "-R0:localhost:"+strconv.Itoa(port), "a.pinggy.io", "yes")
+	// We remove the trailing "yes" as it was causing the remote side to execute a command and exit.
+	cmd := exec.Command("ssh", "-p", "443", "-o", "StrictHostKeyChecking=no", "-R0:localhost:"+strconv.Itoa(port), "a.pinggy.io")
 	
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		listener.Close()
 		return "", nil, fmt.Errorf("failed to get stdout pipe for pinggy: %w", err)
 	}
+	cmd.Stderr = cmd.Stdout // Capture everything from stdout
 
 	if err := cmd.Start(); err != nil {
 		listener.Close()
@@ -59,31 +60,32 @@ func HostLocalFile(filePath string) (string, func(), error) {
 
 	// 3. Parse public URL from Pinggy output
 	publicURL := ""
-	urlRegex := regexp.MustCompile(`https://[a-zA-Z0-9.-]+\.pinggy\.(link|io)`)
+	// Regex matches both .pinggy.link and .pinggy.io, with optional ANSI escape codes
+	urlRegex := regexp.MustCompile(`https?://[a-zA-Z0-9.-]+\.pinggy\.(link|io)`)
 	
-	done := make(chan bool)
+	done := make(chan string)
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			line := scanner.Text()
 			match := urlRegex.FindString(line)
 			if match != "" {
-				publicURL = match
-				done <- true
+				done <- match
 				return
 			}
 		}
-		done <- false
+		done <- ""
 	}()
 
 	select {
-	case found := <-done:
-		if !found {
+	case foundURL := <-done:
+		if foundURL == "" {
 			cmd.Process.Kill()
 			srv.Shutdown(context.Background())
-			return "", nil, fmt.Errorf("pinggy stream closed without providing a URL")
+			return "", nil, fmt.Errorf("pinggy stream closed or no URL found in output")
 		}
-	case <-time.After(15 * time.Second):
+		publicURL = foundURL
+	case <-time.After(20 * time.Second):
 		cmd.Process.Kill()
 		srv.Shutdown(context.Background())
 		return "", nil, fmt.Errorf("timeout waiting for pinggy public URL")

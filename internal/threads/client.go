@@ -26,6 +26,7 @@ type MediaContainer struct {
 }
 
 func (c *Client) CreateTextPost(text string) (string, error) {
+	// Step 1: Create Media Container
 	url := fmt.Sprintf("%s/me/threads", BaseURL)
 	payload := map[string]string{
 		"media_type": "TEXT",
@@ -44,17 +45,18 @@ func (c *Client) CreateTextPost(text string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to create post: %s", resp.Status)
+		return "", fmt.Errorf("failed to create container: %s", resp.Status)
 	}
 
-	var result struct {
+	var container struct {
 		ID string `json:"id"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&container); err != nil {
 		return "", err
 	}
 
-	return result.ID, nil
+	// Step 2: Publish the Container
+	return c.PublishContainer(container.ID)
 }
 
 func (c *Client) CreateImageContainer(imageURL, text string) (string, error) {

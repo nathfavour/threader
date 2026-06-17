@@ -22,22 +22,20 @@ func HostLocalFile(filePath string) (string, func(), error) {
 	fileName := filepath.Base(absPath)
 
 	// 1. Initialize Pinggy Tunnel
-	p := pinggy.Connect()
-	// Use default config (free tier, http tunnel)
-	
-	listener, err := p.Initiate()
+	listener, err := pinggy.Connect(pinggy.HTTP)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to initiate pinggy tunnel: %w", err)
+		return "", nil, fmt.Errorf("failed to connect to pinggy: %w", err)
 	}
-
+	
 	// 2. Extract Public URL
-	// The SDK populates RemoteUrls after Initiation
-	if len(p.RemoteUrls) == 0 {
+	// RemoteUrls is a method on the listener
+	urls := listener.RemoteUrls()
+	if len(urls) == 0 {
 		listener.Close()
 		return "", nil, fmt.Errorf("pinggy initiated but no remote URLs provided")
 	}
 	
-	publicURL := p.RemoteUrls[0]
+	publicURL := urls[0]
 	fullURL := publicURL + "/" + fileName
 
 	// 3. Start static file server using the Pinggy listener

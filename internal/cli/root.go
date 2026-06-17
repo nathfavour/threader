@@ -48,11 +48,23 @@ var rootCmd = &cobra.Command{
 		m := container.NewManager(config.DataDir())
 		reg, _ := project.NewRegistry(config.ProjectsPath())
 		
+		list, _ := m.List()
+		if len(list) == 0 {
+			runInitialSetup(m)
+		}
+
 		selectedProject := validateAndSelectProject(m, reg, targetProject)
 		if selectedProject == nil {
-			runInitialSetup(m)
-			// Re-check after setup
-			selectedProject = validateAndSelectProject(m, reg, targetProject)
+			fmt.Println("⚠️  No project with a valid Threads token found.")
+			fmt.Println("   Please run 'threader config set-token [token]' or re-run setup.")
+			fmt.Print("   Do you want to run setup now? (y/N): ")
+			reader := bufio.NewReader(os.Stdin)
+			ans, _ := reader.ReadString('\n')
+			if strings.ToLower(strings.TrimSpace(ans)) == "y" {
+				runInitialSetup(m)
+				selectedProject = validateAndSelectProject(m, reg, targetProject)
+			}
+			
 			if selectedProject == nil {
 				fmt.Println("❌ Could not resolve a valid project configuration. Exiting.")
 				os.Exit(1)

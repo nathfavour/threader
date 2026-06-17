@@ -106,12 +106,15 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 	}
 
 	// 3. Pick one and craft post
-	// Fetch token for this container
-	vaultKey := fmt.Sprintf("THREADS_TOKEN_%s", strings.ToUpper(cont.Name))
-	token, err := c.AI.VaultGet(vaultKey)
+	// Fetch credentials for this project
+	token, err := c.AI.VaultGet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID))
 	if err != nil {
-		return fmt.Errorf("token not found in vault: %s", vaultKey)
+		return fmt.Errorf("token not found in vault for project %s", p.ID)
 	}
+	
+	// Optional: Client ID/Secret might be needed for advanced flows (e.g., token refresh)
+	// clientID, _ := c.AI.VaultGet(fmt.Sprintf("THREADS_CLIENT_ID_%s", p.ID))
+	// clientSecret, _ := c.AI.VaultGet(fmt.Sprintf("THREADS_CLIENT_SECRET_%s", p.ID))
 
 	goal := "Create a viral marketing post for this product."
 	postText, err := c.Synth.CraftPost(ctx, p, []*media.Asset{targetAsset}, goal)

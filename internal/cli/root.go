@@ -177,12 +177,13 @@ func runInitialSetup(m *container.Manager) {
 	reg, _ := project.NewRegistry(config.ProjectsPath())
 	projects := reg.List()
 
+	var p *project.Project
 	useExisting := false
 	if len(projects) > 0 {
 		fmt.Println("\n--- Project Selection ---")
 		fmt.Printf("Found %d existing project(s):\n", len(projects))
-		for i, p := range projects {
-			fmt.Printf("%d) %s (%s)\n", i+1, p.Name, p.ID)
+		for i, existingProj := range projects {
+			fmt.Printf("%d) %s (%s)\n", i+1, existingProj.Name, existingProj.ID)
 		}
 		fmt.Print("Select a project index to link, or press Enter to create a new one: ")
 		choice, _ := reader.ReadString('\n')
@@ -190,7 +191,8 @@ func runInitialSetup(m *container.Manager) {
 		if choice != "" {
 			idx, err := strconv.Atoi(choice)
 			if err == nil && idx >= 1 && idx <= len(projects) {
-				fmt.Printf("✅ Linked to existing project: %s\n", projects[idx-1].Name)
+				p = projects[idx-1]
+				fmt.Printf("✅ Linked to existing project: %s\n", p.Name)
 				useExisting = true
 			}
 		}
@@ -224,22 +226,41 @@ func runInitialSetup(m *container.Manager) {
 		code, _ := reader.ReadString('\n')
 		code = strings.TrimSpace(code)
 
-		p, err := reg.Register(projName, c.Description, voice, site, code)
+		p, err = reg.Register(projName, c.Description, voice, site, code)
 		if err != nil {
 			fmt.Printf("Error creating project: %v\n", err)
-		} else {
-			fmt.Printf("✅ Project %q initialized.\n", p.Name)
+			os.Exit(1)
 		}
+		fmt.Printf("✅ Project %q initialized.\n", p.Name)
 	}
 
 	aiClient := ai.NewClient()
-	fmt.Print("\nEnter Threads Access Token: ")
+	fmt.Println("\n--- Threads API Configuration ---")
+	
+	fmt.Print("Enter Threads Client ID: ")
+	clientID, _ := reader.ReadString('\n')
+	clientID = strings.TrimSpace(clientID)
+	
+	fmt.Print("Enter Threads Client Secret: ")
+	clientSecret, _ := reader.ReadString('\n')
+	clientSecret = strings.TrimSpace(clientSecret)
+
+	fmt.Print("Enter Threads Redirect URI: ")
+	redirectURI, _ := reader.ReadString('\n')
+	redirectURI = strings.TrimSpace(redirectURI)
+
+	fmt.Print("Enter Threads Access Token: ")
 	token, _ := reader.ReadString('\n')
 	token = strings.TrimSpace(token)
+
 	if token != "" {
-		vaultKey := fmt.Sprintf("THREADS_TOKEN_%s", strings.ToUpper(c.Name))
-		_ = aiClient.VaultSet(vaultKey, token)
-		fmt.Printf("✅ Token saved to vault as %s\n", vaultKey)
+		// Use Project ID for vault keys to ensure per-project configuration
+		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID), token)
+		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_CLIENT_ID_%s", p.ID), clientID)
+		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_CLIENT_SECRET_%s", p.ID), clientSecret)
+		_ = aiClient.VaultSet(fmt.Sprintf("THREADS_REDIRECT_URI_%s", p.ID), redirectURI)
+		
+		fmt.Printf("✅ Configuration saved to vault for project %s\n", p.Name)
 	}
 }
 
@@ -252,14 +273,9 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 	aiClient := ai.NewClient()
 	
 	// Helper to check if a project is "valid"
-	// For now, valid means we have a token in vault for the default container
 	isValid := func(p *project.Project) bool {
-		active, err := m.GetDefault()
-		if err != nil {
-			return false
-		}
-		vaultKey := fmt.Sprintf("THREADS_TOKEN_%s", strings.ToUpper(active.Name))
-		token, err := aiClient.VaultGet(vaultKey)
+		// Check for project-specific token
+		token, err := aiClient.VaultGet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID))
 		return err == nil && token != ""
 	}
 
@@ -277,12 +293,7 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 		return nil
 	}
 
-	// Check default (first project)
-	if len(projects) > 0 && isValid(projects[0]) {
-		return projects[0]
-	}
-
-	// Search for any valid one
+	// Search for valid projects
 	var validProjects []*project.Project
 	for _, p := range projects {
 		if isValid(p) {
@@ -290,23 +301,25 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 		}
 	}
 
+	if len(validProjects) == 0 {
+		return nil
+	}
+
 	if len(validProjects) == 1 {
 		return validProjects[0]
 	}
 
-	if len(validProjects) > 1 {
-		fmt.Println("\n--- Multiple Configured Projects Found ---")
-		for i, p := range validProjects {
-			fmt.Printf("%d) %s\n", i+1, p.Name)
-		}
-		fmt.Print("Select project index to use: ")
-		reader := bufio.NewReader(os.Stdin)
-		choice, _ := reader.ReadString('\n')
-		choice = strings.TrimSpace(choice)
-		idx, err := strconv.Atoi(choice)
-		if err == nil && idx >= 1 && idx <= len(validProjects) {
-			return validProjects[idx-1]
-		}
+	fmt.Println("\n--- Multiple Configured Projects Found ---")
+	for i, p := range validProjects {
+		fmt.Printf("%d) %s (%s)\n", i+1, p.Name, p.ID)
+	}
+	fmt.Print("Select project index to use: ")
+	reader := bufio.NewReader(os.Stdin)
+	choice, _ := reader.ReadString('\n')
+	choice = strings.TrimSpace(choice)
+	idx, err := strconv.Atoi(choice)
+	if err == nil && idx >= 1 && idx <= len(validProjects) {
+		return validProjects[idx-1]
 	}
 
 	return nil

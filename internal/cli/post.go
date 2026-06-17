@@ -155,14 +155,12 @@ var postPublishCmd = &cobra.Command{
 }
 
 func publishToProject(p *project.Project, text string) {
-	aiClient := ai.NewClient()
-	token, err := aiClient.VaultGet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID))
-	if err != nil {
-		fmt.Printf("Error: Threads token not found for project %q in Vibe Vault.\n", p.Name)
+	if p.AccessToken == "" {
+		fmt.Printf("Error: Threads token not found for project %q.\n", p.Name)
 		return
 	}
 
-	client := threads.NewClient(token)
+	client := threads.NewClient(p.AccessToken)
 	id, err := client.CreateTextPost(text)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)

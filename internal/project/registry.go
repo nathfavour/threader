@@ -86,7 +86,7 @@ func (r *Registry) List() []*Project {
 	return list
 }
 
-func (r *Registry) Update(id string, name, desc, voice, site, code string) (*Project, error) {
+func (r *Registry) Update(id string, name, desc, voice, site, code, token string) (*Project, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -109,6 +109,9 @@ func (r *Registry) Update(id string, name, desc, voice, site, code string) (*Pro
 	}
 	if code != "" {
 		p.CodebaseURL = code
+	}
+	if token != "" {
+		p.AccessToken = token
 	}
 
 	return p, r.save()

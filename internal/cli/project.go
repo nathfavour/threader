@@ -94,7 +94,7 @@ var projectEditCmd = &cobra.Command{
 			return
 		}
 
-		updated, err := reg.Update(p.ID, name, desc, voice, site, code)
+		updated, err := reg.Update(p.ID, name, desc, voice, site, code, "")
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return

@@ -161,19 +161,18 @@ func daemonize() {
 func configureProject(p *project.Project) {
 	fmt.Printf("\n--- Configuring Project: %s ---\n", p.Name)
 	reader := bufio.NewReader(os.Stdin)
-	aiClient := ai.NewClient()
 
 	fmt.Print("Enter Threads Access Token: ")
 	token, _ := reader.ReadString('\n')
 	token = strings.TrimSpace(token)
 
 	if token != "" {
-		err := aiClient.VaultSet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID), token)
+		reg, _ := project.NewRegistry(config.ProjectsPath())
+		_, err := reg.Update(p.ID, "", "", "", "", "", token)
 		if err != nil {
-			fmt.Printf("❌ Error saving to vault: %v\n", err)
-			fmt.Println("   Ensure 'vibeauracle' is running.")
+			fmt.Printf("❌ Error saving token: %v\n", err)
 		} else {
-			fmt.Printf("✅ Token saved to vault for project %s\n", p.Name)
+			fmt.Printf("✅ Token saved locally for project %s\n", p.Name)
 		}
 	}
 }
@@ -291,27 +290,15 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 		return nil
 	}
 
-	aiClient := ai.NewClient()
-	
 	// Helper to check if a project is "valid"
-	isValid := func(p *project.Project) (bool, error) {
-		// Check for project-specific token
-		token, err := aiClient.VaultGet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID))
-		if err != nil {
-			return false, err
-		}
-		return token != "", nil
+	isValid := func(p *project.Project) bool {
+		return p.AccessToken != ""
 	}
 
 	if target != "" {
 		for _, p := range projects {
 			if p.Name == target || p.ID == target {
-				valid, err := isValid(p)
-				if err != nil {
-					fmt.Printf("⚠️  Vault error for project %q: %v\n", p.Name, err)
-					return nil
-				}
-				if valid {
+				if isValid(p) {
 					return p
 				}
 				fmt.Printf("⚠️  Project %q found but is not fully configured (missing token).\n", p.Name)
@@ -325,25 +312,12 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 	// Search for valid projects
 	var validProjects []*project.Project
 	for _, p := range projects {
-		valid, err := isValid(p)
-		if err != nil {
-			// Don't spam errors for every project, but maybe log it if verbose
-			continue
-		}
-		if valid {
+		if isValid(p) {
 			validProjects = append(validProjects, p)
 		}
 	}
 
 	if len(validProjects) == 0 {
-		// If we have projects but NONE are valid, and we hit a connection error earlier,
-		// let's at least check one to show the error.
-		if len(projects) > 0 {
-			_, err := isValid(projects[0])
-			if err != nil {
-				fmt.Printf("⚠️  Vault access error: %v\n", err)
-			}
-		}
 		return nil
 	}
 

@@ -294,16 +294,24 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 	aiClient := ai.NewClient()
 	
 	// Helper to check if a project is "valid"
-	isValid := func(p *project.Project) bool {
+	isValid := func(p *project.Project) (bool, error) {
 		// Check for project-specific token
 		token, err := aiClient.VaultGet(fmt.Sprintf("THREADS_TOKEN_%s", p.ID))
-		return err == nil && token != ""
+		if err != nil {
+			return false, err
+		}
+		return token != "", nil
 	}
 
 	if target != "" {
 		for _, p := range projects {
 			if p.Name == target || p.ID == target {
-				if isValid(p) {
+				valid, err := isValid(p)
+				if err != nil {
+					fmt.Printf("⚠️  Vault error for project %q: %v\n", p.Name, err)
+					return nil
+				}
+				if valid {
 					return p
 				}
 				fmt.Printf("⚠️  Project %q found but is not fully configured (missing token).\n", p.Name)
@@ -317,12 +325,25 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 	// Search for valid projects
 	var validProjects []*project.Project
 	for _, p := range projects {
-		if isValid(p) {
+		valid, err := isValid(p)
+		if err != nil {
+			// Don't spam errors for every project, but maybe log it if verbose
+			continue
+		}
+		if valid {
 			validProjects = append(validProjects, p)
 		}
 	}
 
 	if len(validProjects) == 0 {
+		// If we have projects but NONE are valid, and we hit a connection error earlier,
+		// let's at least check one to show the error.
+		if len(projects) > 0 {
+			_, err := isValid(projects[0])
+			if err != nil {
+				fmt.Printf("⚠️  Vault access error: %v\n", err)
+			}
+		}
 		return nil
 	}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Pinggy-io/pinggy-go/pinggy"
@@ -35,7 +36,18 @@ func HostLocalFile(filePath string) (string, func(), error) {
 		return "", nil, fmt.Errorf("pinggy initiated but no remote URLs provided")
 	}
 	
-	publicURL := urls[0]
+	var publicURL string
+	for _, u := range urls {
+		if strings.HasPrefix(u, "https://") {
+			publicURL = u
+			break
+		}
+	}
+	
+	if publicURL == "" {
+		publicURL = strings.Replace(urls[0], "http://", "https://", 1)
+	}
+	
 	fullURL := publicURL + "/" + fileName
 
 	// 3. Start static file server using the Pinggy listener
@@ -48,6 +60,9 @@ func HostLocalFile(filePath string) (string, func(), error) {
 			fmt.Printf("Pinggy server error: %v\n", err)
 		}
 	}()
+
+	// Give the tunnel a moment to stabilize across Pinggy's global network
+	time.Sleep(2 * time.Second)
 
 	cleanup := func() {
 		fmt.Println("🧵 Cleaning up Pinggy SDK hosting...")

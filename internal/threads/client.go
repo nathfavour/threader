@@ -78,6 +78,12 @@ func (c *Client) CreateImageContainer(imageURL, text string) (string, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		return "", fmt.Errorf("failed to create image container (status %d): %v", resp.StatusCode, errResp)
+	}
+
 	var result struct {
 		ID string `json:"id"`
 	}
@@ -104,6 +110,12 @@ func (c *Client) PublishContainer(containerID string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		return "", fmt.Errorf("failed to publish container (status %d): %v", resp.StatusCode, errResp)
+	}
 
 	var result struct {
 		ID string `json:"id"`

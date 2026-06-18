@@ -211,7 +211,7 @@ func publishToProject(p *project.Project, text string, asset *media.Asset) {
 
 		// If it's a local file, set up transient hosting
 		if !strings.HasPrefix(asset.FilePath, "http") {
-			fmt.Println("🧵 Starting transient hosting via Pinggy...")
+			fmt.Println("🧵 Starting transient hosting via localhost.run...")
 			u, c, err := threads.HostLocalFile(asset.FilePath)
 			if err != nil {
 				fmt.Printf("Error setting up transient hosting: %v\n", err)

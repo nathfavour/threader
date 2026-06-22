@@ -2,6 +2,7 @@ package threads
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -68,32 +69,18 @@ func (c *MarketingCell) Pulse(ctx context.Context) error {
 }
 
 func (c *MarketingCell) getLastPostTime(projectID string) (time.Time, error) {
-	projectMediaDir := filepath.Join(config.MediaDir(), projectID, "media")
-	files, err := os.ReadDir(projectMediaDir)
+	db, err := media.OpenDB(config.ProjectDir(projectID))
 	if err != nil {
 		return time.Time{}, err
 	}
+	defer db.Close()
 
-	var latest time.Time
-	for _, f := range files {
-		if filepath.Ext(f.Name()) == ".json" {
-			path := filepath.Join(projectMediaDir, f.Name())
-			data, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-			var asset struct {
-				Posted   bool      `json:"posted"`
-				PostedAt time.Time `json:"posted_at"`
-			}
-			if json.Unmarshal(data, &asset) == nil && asset.Posted {
-				if asset.PostedAt.After(latest) {
-					latest = asset.PostedAt
-				}
-			}
-		}
+	var postedAtStr sql.NullString
+	err = db.db.QueryRow(`SELECT posted_at FROM assets WHERE posted = 1 ORDER BY posted_at DESC LIMIT 1`).Scan(&postedAtStr)
+	if err != nil || !postedAtStr.Valid || postedAtStr.String == "" {
+		return time.Time{}, nil
 	}
-	return latest, nil
+	return time.Parse(time.RFC3339, postedAtStr.String)
 }
 
 func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, cont *container.Container) error {
@@ -112,46 +99,34 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 		}
 	}
 
-	// 1. Find unposted media
+	// 1. Run automatic indexing scanner first to discover and pull in any new images dropped by the user
 	projectMediaDir := filepath.Join(config.MediaDir(), p.ID, "media")
-	
-	files, err := os.ReadDir(projectMediaDir)
+	projectDir := config.ProjectDir(p.ID)
+	_ = media.ScanAndIndex(p.ID, projectMediaDir, projectDir)
+
+	// 2. Open DB and get unposted assets
+	db, err := media.OpenDB(projectDir)
 	if err != nil {
-		return nil // No media yet
+		return err
+	}
+	defer db.Close()
+
+	unposted, err := db.GetUnpostedAssets()
+	if err != nil || len(unposted) == 0 {
+		return nil // No unposted media
 	}
 
-	var targetAsset *media.Asset
-	var targetPath string
-	for _, f := range files {
-		if filepath.Ext(f.Name()) == ".json" {
-			path := filepath.Join(projectMediaDir, f.Name())
-			data, _ := os.ReadFile(path)
-			var asset media.Asset
-			if json.Unmarshal(data, &asset) == nil && !asset.Posted {
-				targetAsset = &asset
-				targetPath = path
-				break
-			}
-		}
-	}
+	targetAsset := unposted[0]
 
-	if targetAsset == nil {
-		return nil
-	}
-
-	// 2. Pre-publication Validation
+	// 3. Pre-publication Validation
 	if err := c.validateMedia(targetAsset); err != nil {
 		fmt.Printf("MarketingCell: Media validation failed for asset %s: %v\n", targetAsset.ID, err)
 		// Mark as skipped/failed to avoid infinite loop on bad asset
-		targetAsset.Posted = true
-		targetAsset.ThreadID = "SKIPPED_INVALID_MEDIA"
-		targetAsset.PostedAt = time.Now()
-		updatedData, _ := json.MarshalIndent(targetAsset, "", "  ")
-		_ = os.WriteFile(targetPath, updatedData, 0644)
+		_ = db.MarkPosted(targetAsset.ID, "SKIPPED_INVALID_MEDIA")
 		return nil
 	}
 
-	// 3. Rotate CTA and craft post
+	// 4. Rotate CTA and craft post
 	token := p.AccessToken
 	if token == "" {
 		return fmt.Errorf("token not found for project %s", p.ID)
@@ -169,27 +144,22 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 		return err
 	}
 
-	// 4. Validate Character Limit (Threads: 500 chars)
+	// 5. Validate Character Limit (Threads: 500 chars)
 	if len(postText) > 500 {
 		fmt.Printf("MarketingCell: Post text too long (%d chars). Truncating.\n", len(postText) )
 		postText = postText[:497] + "..."
 	}
 
-	// 5. Post to Threads
+	// 6. Post to Threads
 	client := NewClient(token)
 	threadID, err := client.CreateTextPost(postText)
 	if err != nil {
 		return err
 	}
 
-	// 6. Record usage and mark as posted
+	// 7. Record usage and mark as posted
 	c.Quota.RecordPublish(cont.Name)
-	targetAsset.Posted = true
-	targetAsset.ThreadID = threadID
-	targetAsset.PostedAt = time.Now()
-	
-	updatedData, _ := json.MarshalIndent(targetAsset, "", "  ")
-	_ = os.WriteFile(targetPath, updatedData, 0644)
+	_ = db.MarkPosted(targetAsset.ID, threadID)
 
 	fmt.Printf("MarketingCell: Successfully posted to Threads for project %s (ThreadID: %s)\n", p.Name, threadID)
 	return nil

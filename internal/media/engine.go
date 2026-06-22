@@ -74,10 +74,17 @@ func (e *Engine) IndexMedia(projectID, srcPath string) (*Asset, error) {
 		UploadedAt: time.Now(),
 	}
 
-	// 4. Save metadata
+	// 4. Save metadata (Legacy JSON fallback)
 	metaPath := filepath.Join(projectDir, assetID+".json")
 	metaData, _ := json.MarshalIndent(asset, "", "  ")
 	_ = os.WriteFile(metaPath, metaData, 0644)
+
+	// 5. Save metadata to SQLite
+	projectDirConf := filepath.Join(filepath.Dir(e.BaseDir), "projects", projectID)
+	if db, err := OpenDB(projectDirConf); err == nil {
+		_ = db.AddAsset(asset)
+		db.Close()
+	}
 
 	return asset, nil
 }

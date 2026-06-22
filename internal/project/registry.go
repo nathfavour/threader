@@ -24,6 +24,7 @@ type Project struct {
 	ManifestPath      string    `json:"manifest_path,omitempty"`
 	LastCTAIndex      int       `json:"last_cta_index"`
 	PostIntervalHours int       `json:"post_interval_hours,omitempty"`
+	GenerationMode    string    `json:"generation_mode,omitempty"` // Mode A: "vibe", Mode B: "completion" (default)
 }
 
 type Registry struct {
@@ -72,6 +73,7 @@ func (r *Registry) Register(name, desc, voice, site, code string) (*Project, err
 		CreatedAt:         time.Now(),
 		ManifestPath:      manifestPath,
 		PostIntervalHours: 4, // Default to 4 hours
+		GenerationMode:    "completion", // Default to Mode B
 	}
 
 	// Write boilerplate
@@ -102,7 +104,7 @@ func (r *Registry) List() []*Project {
 	return list
 }
 
-func (r *Registry) Update(id string, name, desc, voice, site, code, token string, manifestPath string, postIntervalHours int) (*Project, error) {
+func (r *Registry) Update(id string, name, desc, voice, site, code, token string, manifestPath string, postIntervalHours int, generationMode string) (*Project, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -134,6 +136,9 @@ func (r *Registry) Update(id string, name, desc, voice, site, code, token string
 	}
 	if postIntervalHours > 0 {
 		p.PostIntervalHours = postIntervalHours
+	}
+	if generationMode != "" {
+		p.GenerationMode = generationMode
 	}
 
 	return p, r.save()

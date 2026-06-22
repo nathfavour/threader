@@ -67,14 +67,15 @@ var projectEditCmd = &cobra.Command{
 		fmt.Printf("5) Codebase URL [%s]\n", p.CodebaseURL)
 		fmt.Printf("6) Manifest Path [%s]\n", p.ManifestPath)
 		fmt.Printf("7) Post Interval (Hours) [%d]\n", p.PostIntervalHours)
-		fmt.Printf("8) Edit README/Manifest File directly\n")
-		fmt.Printf("9) Cancel\n")
-		fmt.Print("Select parameter to edit (1-9): ")
+		fmt.Printf("8) Generation Mode [%s]\n", p.GenerationMode)
+		fmt.Printf("9) Edit README/Manifest File directly\n")
+		fmt.Printf("10) Cancel\n")
+		fmt.Print("Select parameter to edit (1-10): ")
 
 		choice, _ := reader.ReadString('\n')
 		choice = strings.TrimSpace(choice)
 
-		var name, desc, voice, site, code, manifestPath string
+		var name, desc, voice, site, code, manifestPath, generationMode string
 		var interval int
 
 		switch choice {
@@ -110,9 +111,13 @@ var projectEditCmd = &cobra.Command{
 				interval = val
 			}
 		case "8":
+			fmt.Print("Enter generation mode ('completion' or 'vibe'): ")
+			generationMode, _ = reader.ReadString('\n')
+			generationMode = strings.TrimSpace(generationMode)
+		case "9":
 			if p.ManifestPath == "" {
 				p.ManifestPath = filepath.Join(config.ProjectDir(p.ID), "README.md")
-				_, _ = reg.Update(p.ID, "", "", "", "", "", "", p.ManifestPath, 0)
+				_, _ = reg.Update(p.ID, "", "", "", "", "", "", p.ManifestPath, 0, "")
 			}
 			fmt.Println("\n--- Edit README/Manifest Content ---")
 			fmt.Println("1) Edit directly with default terminal editor")
@@ -163,7 +168,7 @@ var projectEditCmd = &cobra.Command{
 			return
 		}
 
-		updated, err := reg.Update(p.ID, name, desc, voice, site, code, "", manifestPath, interval)
+		updated, err := reg.Update(p.ID, name, desc, voice, site, code, "", manifestPath, interval, generationMode)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
@@ -192,7 +197,7 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		if manifest != "" || interval > 0 {
-			_, _ = reg.Update(p.ID, "", "", "", "", "", "", manifest, interval)
+			_, _ = reg.Update(p.ID, "", "", "", "", "", "", manifest, interval, "")
 		}
 
 		fmt.Printf("Created project: %s (ID: %s)\n", p.Name, p.ID)

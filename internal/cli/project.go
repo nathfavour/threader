@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nathfavour/threader/internal/ai"
 	"github.com/nathfavour/threader/internal/project"
 	"github.com/nathfavour/threader/pkg/config"
 	"github.com/spf13/cobra"
@@ -70,10 +69,9 @@ var projectEditCmd = &cobra.Command{
 		fmt.Printf("7) Post Interval (Hours) [%d]\n", p.PostIntervalHours)
 		fmt.Printf("8) Generation Mode [%s]\n", p.GenerationMode)
 		fmt.Printf("9) Threads Access Token [%s]\n", maskToken(p.AccessToken))
-		fmt.Printf("10) Completion API Key (Vibe Vault)\n")
-		fmt.Printf("11) Edit README/Manifest File directly\n")
-		fmt.Printf("12) Cancel\n")
-		fmt.Print("Select parameter to edit (1-12): ")
+		fmt.Printf("10) Edit README/Manifest File directly\n")
+		fmt.Printf("11) Cancel\n")
+		fmt.Print("Select parameter to edit (1-11): ")
 
 		choice, _ := reader.ReadString('\n')
 		choice = strings.TrimSpace(choice)
@@ -122,36 +120,6 @@ var projectEditCmd = &cobra.Command{
 			token, _ = reader.ReadString('\n')
 			token = strings.TrimSpace(token)
 		case "10":
-			fmt.Println("\nChoose API Key to set in Vibe Vault:")
-			fmt.Println("1) github_models_pat")
-			fmt.Println("2) openai_api_key")
-			fmt.Print("Select key type (1-2): ")
-			keyOpt, _ := reader.ReadString('\n')
-			keyOpt = strings.TrimSpace(keyOpt)
-
-			keyName := ""
-			if keyOpt == "1" {
-				keyName = "github_models_pat"
-			} else if keyOpt == "2" {
-				keyName = "openai_api_key"
-			} else {
-				fmt.Println("Invalid choice.")
-				return
-			}
-
-			fmt.Printf("Enter value for %s: ", keyName)
-			apiKeyVal, _ := reader.ReadString('\n')
-			apiKeyVal = strings.TrimSpace(apiKeyVal)
-
-			aiClient := ai.NewClient()
-			err := aiClient.VaultSet(keyName, apiKeyVal)
-			if err != nil {
-				fmt.Printf("Error saving API key to Vault: %v\n", err)
-			} else {
-				fmt.Printf("✅ API key %s saved to Vibe Vault.\n", keyName)
-			}
-			return
-		case "11":
 			if p.ManifestPath == "" {
 				p.ManifestPath = filepath.Join(config.ProjectDir(p.ID), "README.md")
 				_, _ = reg.Update(p.ID, "", "", "", "", "", "", p.ManifestPath, 0, "")

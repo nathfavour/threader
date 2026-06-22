@@ -34,7 +34,8 @@ func OpenDB(projectDir string) (*DB, error) {
 		uploaded_at TEXT,
 		posted INTEGER,
 		thread_id TEXT,
-		posted_at TEXT
+		posted_at TEXT,
+		post_text TEXT
 	);
 	CREATE TABLE IF NOT EXISTS replied_threads (
 		parent_thread_id TEXT PRIMARY KEY,
@@ -45,6 +46,9 @@ func OpenDB(projectDir string) (*DB, error) {
 		db.Close()
 		return nil, err
 	}
+
+	// Migration: add post_text column if it doesn't exist
+	_, _ = db.Exec(`ALTER TABLE assets ADD COLUMN post_text TEXT;`)
 
 	return &DB{SQL: db}, nil
 }
@@ -66,15 +70,15 @@ func (d *DB) Close() error {
 
 func (d *DB) AddAsset(a *Asset) error {
 	_, err := d.SQL.Exec(`
-		INSERT INTO assets (id, file_path, ocr_text, ai_summary, uploaded_at, posted, thread_id, posted_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO assets (id, file_path, ocr_text, ai_summary, uploaded_at, posted, thread_id, posted_at, post_text)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(file_path) DO UPDATE SET
 			ocr_text=excluded.ocr_text,
 			ai_summary=excluded.ai_summary,
 			posted=excluded.posted,
 			thread_id=excluded.thread_id,
 			posted_at=excluded.posted_at
-	`, a.ID, a.FilePath, a.OCRText, a.AISummary, a.UploadedAt.Format(time.RFC3339), boolToInt(a.Posted), a.ThreadID, formatTime(a.PostedAt))
+	`, a.ID, a.FilePath, a.OCRText, a.AISummary, a.UploadedAt.Format(time.RFC3339), boolToInt(a.Posted), a.ThreadID, formatTime(a.PostedAt), "")
 	return err
 }
 
@@ -106,8 +110,8 @@ func (d *DB) GetUnpostedAssets() ([]*Asset, error) {
 	return assets, nil
 }
 
-func (d *DB) MarkPosted(id string, threadID string) error {
-	_, err := d.SQL.Exec(`UPDATE assets SET posted = 1, thread_id = ?, posted_at = ? WHERE id = ?`, threadID, time.Now().Format(time.RFC3339), id)
+func (d *DB) MarkPosted(id string, threadID string, postText string) error {
+	_, err := d.SQL.Exec(`UPDATE assets SET posted = 1, thread_id = ?, posted_at = ?, post_text = ? WHERE id = ?`, threadID, time.Now().Format(time.RFC3339), postText, id)
 	return err
 }
 

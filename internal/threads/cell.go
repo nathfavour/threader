@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nathfavour/threader/internal/ai"
 	"github.com/nathfavour/threader/internal/container"
@@ -66,7 +67,51 @@ func (c *MarketingCell) Pulse(ctx context.Context) error {
 	return nil
 }
 
+func (c *MarketingCell) getLastPostTime(projectID string) (time.Time, error) {
+	projectMediaDir := filepath.Join(config.MediaDir(), projectID, "media")
+	files, err := os.ReadDir(projectMediaDir)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	var latest time.Time
+	for _, f := range files {
+		if filepath.Ext(f.Name()) == ".json" {
+			path := filepath.Join(projectMediaDir, f.Name())
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			var asset struct {
+				Posted   bool      `json:"posted"`
+				PostedAt time.Time `json:"posted_at"`
+			}
+			if json.Unmarshal(data, &asset) == nil && asset.Posted {
+				if asset.PostedAt.After(latest) {
+					latest = asset.PostedAt
+				}
+			}
+		}
+	}
+	return latest, nil
+}
+
 func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, cont *container.Container) error {
+	// 0. Check Spacing/Scheduling (Distribute activity over the course of a day)
+	lastPost, err := c.getLastPostTime(p.ID)
+	if err == nil && !lastPost.IsZero() {
+		intervalHours := p.PostIntervalHours
+		if intervalHours <= 0 {
+			intervalHours = 4 // default to 4 hours
+		}
+		minInterval := time.Duration(intervalHours) * time.Hour
+		timeSinceLastPost := time.Since(lastPost)
+		if timeSinceLastPost < minInterval {
+			// Waiting calmly; not time to post yet
+			return nil
+		}
+	}
+
 	// 1. Find unposted media
 	projectMediaDir := filepath.Join(config.MediaDir(), p.ID, "media")
 	
@@ -100,20 +145,26 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 		// Mark as skipped/failed to avoid infinite loop on bad asset
 		targetAsset.Posted = true
 		targetAsset.ThreadID = "SKIPPED_INVALID_MEDIA"
+		targetAsset.PostedAt = time.Now()
 		updatedData, _ := json.MarshalIndent(targetAsset, "", "  ")
 		_ = os.WriteFile(targetPath, updatedData, 0644)
 		return nil
 	}
 
-	// 3. Pick one and craft post
-	// Fetch credentials for this project
+	// 3. Rotate CTA and craft post
 	token := p.AccessToken
 	if token == "" {
 		return fmt.Errorf("token not found for project %s", p.ID)
 	}
 
+	reg, _ := project.NewRegistry(config.ProjectsPath())
+	cta, err := reg.RotateCTA(p.ID)
+	if err != nil {
+		return err
+	}
+
 	goal := "Create a viral marketing post for this product."
-	postText, err := c.Synth.CraftPost(ctx, p, []*media.Asset{targetAsset}, goal)
+	postText, err := c.Synth.CraftPost(ctx, p, []*media.Asset{targetAsset}, goal, cta)
 	if err != nil {
 		return err
 	}
@@ -135,6 +186,7 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 	c.Quota.RecordPublish(cont.Name)
 	targetAsset.Posted = true
 	targetAsset.ThreadID = threadID
+	targetAsset.PostedAt = time.Now()
 	
 	updatedData, _ := json.MarshalIndent(targetAsset, "", "  ")
 	_ = os.WriteFile(targetPath, updatedData, 0644)

@@ -116,7 +116,8 @@ var postCraftCmd = &cobra.Command{
 			}
 
 			fmt.Printf("🧵 Crafting AI post for project %q...\n", p.Name)
-			resp, err := synth.CraftPost(context.Background(), p, assets, goal)
+			cta, _ := reg.RotateCTA(p.ID)
+			resp, err := synth.CraftPost(context.Background(), p, assets, goal, cta)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				return

@@ -168,7 +168,7 @@ func configureProject(p *project.Project) {
 
 	if token != "" {
 		reg, _ := project.NewRegistry(config.ProjectsPath())
-		_, err := reg.Update(p.ID, "", "", "", "", "", token)
+		_, err := reg.Update(p.ID, "", "", "", "", "", token, "", 0)
 		if err != nil {
 			fmt.Printf("❌ Error saving token: %v\n", err)
 		} else {

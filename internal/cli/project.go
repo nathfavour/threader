@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/nathfavour/threader/internal/project"
@@ -21,6 +22,8 @@ func init() {
 	projectCreateCmd.Flags().String("voice", "", "Brand voice")
 	projectCreateCmd.Flags().String("site", "", "Website URL")
 	projectCreateCmd.Flags().String("code", "", "Codebase URL (if open source)")
+	projectCreateCmd.Flags().String("manifest", "", "Path to system architecture manifest file")
+	projectCreateCmd.Flags().Int("interval", 4, "Post spacing interval in hours")
 }
 
 var projectCmd = &cobra.Command{
@@ -60,13 +63,16 @@ var projectEditCmd = &cobra.Command{
 		fmt.Printf("3) Brand Voice [%s]\n", p.BrandVoice)
 		fmt.Printf("4) Website URL [%s]\n", p.WebsiteURL)
 		fmt.Printf("5) Codebase URL [%s]\n", p.CodebaseURL)
-		fmt.Printf("6) Cancel\n")
-		fmt.Print("Select parameter to edit (1-6): ")
+		fmt.Printf("6) Manifest Path [%s]\n", p.ManifestPath)
+		fmt.Printf("7) Post Interval (Hours) [%d]\n", p.PostIntervalHours)
+		fmt.Printf("8) Cancel\n")
+		fmt.Print("Select parameter to edit (1-8): ")
 
 		choice, _ := reader.ReadString('\n')
 		choice = strings.TrimSpace(choice)
 
-		var name, desc, voice, site, code string
+		var name, desc, voice, site, code, manifestPath string
+		var interval int
 
 		switch choice {
 		case "1":
@@ -89,12 +95,23 @@ var projectEditCmd = &cobra.Command{
 			fmt.Print("Enter new codebase URL: ")
 			code, _ = reader.ReadString('\n')
 			code = strings.TrimSpace(code)
+		case "6":
+			fmt.Print("Enter new manifest path: ")
+			manifestPath, _ = reader.ReadString('\n')
+			manifestPath = strings.TrimSpace(manifestPath)
+		case "7":
+			fmt.Print("Enter new post interval (hours): ")
+			valStr, _ := reader.ReadString('\n')
+			valStr = strings.TrimSpace(valStr)
+			if val, err := strconv.Atoi(valStr); err == nil {
+				interval = val
+			}
 		default:
 			fmt.Println("Edit cancelled.")
 			return
 		}
 
-		updated, err := reg.Update(p.ID, name, desc, voice, site, code, "")
+		updated, err := reg.Update(p.ID, name, desc, voice, site, code, "", manifestPath, interval)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
@@ -113,12 +130,19 @@ var projectCreateCmd = &cobra.Command{
 		voice, _ := cmd.Flags().GetString("voice")
 		site, _ := cmd.Flags().GetString("site")
 		code, _ := cmd.Flags().GetString("code")
+		manifest, _ := cmd.Flags().GetString("manifest")
+		interval, _ := cmd.Flags().GetInt("interval")
 
 		p, err := reg.Register(args[0], desc, voice, site, code)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
 		}
+
+		if manifest != "" || interval > 0 {
+			_, _ = reg.Update(p.ID, "", "", "", "", "", "", manifest, interval)
+		}
+
 		fmt.Printf("Created project: %s (ID: %s)\n", p.Name, p.ID)
 	},
 }

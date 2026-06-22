@@ -93,7 +93,7 @@ func GetProjectManifest(p *project.Project) string {
 	return p.Description
 }
 
-func (s *Synthesizer) CraftPost(ctx context.Context, p *project.Project, assets []*media.Asset, goal string, cta string) (string, error) {
+func (s *Synthesizer) CraftPost(ctx context.Context, p *project.Project, assets []*media.Asset, goal string, cta string, recentCopies []string) (string, error) {
 	manifest := GetProjectManifest(p)
 
 	var mediaContext strings.Builder
@@ -114,6 +114,11 @@ func (s *Synthesizer) CraftPost(ctx context.Context, p *project.Project, assets 
 		feedbackPrompt := ""
 		if attempt > 1 {
 			feedbackPrompt = fmt.Sprintf("\n\n### CRITICAL CORRECTION\nYour previous attempt: %q failed validation: %v.\nRegenerate making sure to fix this error.", candidatePost, lastErr)
+		}
+
+		avoidPrompt := ""
+		if len(recentCopies) > 0 {
+			avoidPrompt = fmt.Sprintf("\n\n### CRITICAL VARIATION CONSTRAINT\nDo NOT generate any text similar to these previous copies:\n- %s", strings.Join(recentCopies, "\n- "))
 		}
 
 		prompt := fmt.Sprintf(`### ROLE
@@ -137,8 +142,9 @@ Product Manifest / Architecture:
 ### TASK
 Goal: %s
 Media Context: %s
+%s
 
-Output ONLY the raw statement without any CTA or links.%s`, p.Name, manifest, "`", goal, mediaContext.String(), feedbackPrompt)
+Output ONLY the raw statement without any CTA or links.%s`, p.Name, manifest, "`", goal, mediaContext.String(), avoidPrompt, feedbackPrompt)
 
 		intent := p.GenerationMode
 		if intent == "" {
@@ -175,7 +181,7 @@ Output ONLY the raw statement without any CTA or links.%s`, p.Name, manifest, "`
 	return fmt.Sprintf("Protocol active. %s", cta), nil
 }
 
-func (s *Synthesizer) CraftReply(ctx context.Context, p *project.Project, threadContent string, assets []*media.Asset) (string, error) {
+func (s *Synthesizer) CraftReply(ctx context.Context, p *project.Project, threadContent string, assets []*media.Asset, recentCopies []string) (string, error) {
 	manifest := GetProjectManifest(p)
 
 	var mediaContext strings.Builder
@@ -183,6 +189,11 @@ func (s *Synthesizer) CraftReply(ctx context.Context, p *project.Project, thread
 		if a.OCRText != "" {
 			mediaContext.WriteString(fmt.Sprintf("My Asset %d (OCR): %s\n", i+1, a.OCRText))
 		}
+	}
+
+	avoidPrompt := ""
+	if len(recentCopies) > 0 {
+		avoidPrompt = fmt.Sprintf("\n\n### CRITICAL VARIATION CONSTRAINT\nDo NOT generate any text similar to these previous copies:\n- %s", strings.Join(recentCopies, "\n- "))
 	}
 
 	prompt := fmt.Sprintf(`### ROLE
@@ -205,8 +216,9 @@ Product Manifest / Architecture:
 4. Max 1 emoji. 0%% exclamation marks.
 5. Absolute objective tone.
 6. Banned words: delve, revolutionize, game-changer, seamless, testament, unlock, empower, streamline, landscape, elevate, next-level, next-gen.
+%s
 
-Raw reply text only.`, manifest, threadContent, mediaContext.String())
+Raw reply text only.`, manifest, threadContent, mediaContext.String(), avoidPrompt)
 
 	intent := p.GenerationMode
 	if intent == "" {

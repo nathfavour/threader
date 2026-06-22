@@ -134,3 +134,30 @@ func (r *Registry) save() error {
 	}
 	return os.WriteFile(r.dataPath, data, 0644)
 }
+
+var CTAMatrix = []string{
+	"Link is on the profile.",
+	"Check the bio for the link.",
+	"The link is on the page.",
+	"Head to the profile for access.",
+	"The link is pinned to the profile.",
+	"Visit the page for the link.",
+	"Link is at the top of the page.",
+	"Go to the profile for the link.",
+	"Grab the link from the profile.",
+}
+
+func (r *Registry) RotateCTA(id string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p, ok := r.projects[id]
+	if !ok {
+		return "", fmt.Errorf("project %q not found", id)
+	}
+
+	cta := CTAMatrix[p.LastCTAIndex%len(CTAMatrix)]
+	p.LastCTAIndex = (p.LastCTAIndex + 1) % len(CTAMatrix)
+	_ = r.save()
+	return cta, nil
+}

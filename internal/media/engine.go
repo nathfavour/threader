@@ -19,6 +19,7 @@ type Asset struct {
 	UploadedAt time.Time `json:"uploaded_at"`
 	Posted     bool      `json:"posted"`
 	ThreadID   string    `json:"thread_id"`
+	PostedAt   time.Time `json:"posted_at,omitempty"`
 }
 
 type Engine struct {

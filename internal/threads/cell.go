@@ -120,7 +120,6 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 		}
 	}
 
-	fmt.Println("DEBUG: Scanner starting")
 	// 1. Run automatic indexing scanner first to discover and pull in any new images dropped by the user
 	projectMediaDir := filepath.Join(config.MediaDir(), p.ID, "media")
 	projectDir := config.ProjectDir(p.ID)

@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -65,8 +67,9 @@ var projectEditCmd = &cobra.Command{
 		fmt.Printf("5) Codebase URL [%s]\n", p.CodebaseURL)
 		fmt.Printf("6) Manifest Path [%s]\n", p.ManifestPath)
 		fmt.Printf("7) Post Interval (Hours) [%d]\n", p.PostIntervalHours)
-		fmt.Printf("8) Cancel\n")
-		fmt.Print("Select parameter to edit (1-8): ")
+		fmt.Printf("8) Edit README/Manifest File directly\n")
+		fmt.Printf("9) Cancel\n")
+		fmt.Print("Select parameter to edit (1-9): ")
 
 		choice, _ := reader.ReadString('\n')
 		choice = strings.TrimSpace(choice)
@@ -106,6 +109,55 @@ var projectEditCmd = &cobra.Command{
 			if val, err := strconv.Atoi(valStr); err == nil {
 				interval = val
 			}
+		case "8":
+			if p.ManifestPath == "" {
+				p.ManifestPath = filepath.Join(config.ProjectDir(p.ID), "README.md")
+				_, _ = reg.Update(p.ID, "", "", "", "", "", "", p.ManifestPath, 0)
+			}
+			fmt.Println("\n--- Edit README/Manifest Content ---")
+			fmt.Println("1) Edit directly with default terminal editor")
+			fmt.Println("2) Import/Copy from an existing file path")
+			fmt.Print("Select option (1-2): ")
+			opt, _ := reader.ReadString('\n')
+			opt = strings.TrimSpace(opt)
+
+			if opt == "1" {
+				editor := os.Getenv("EDITOR")
+				if editor == "" {
+					editor = "nano"
+				}
+				fmt.Printf("Opening %s with %s...\n", p.ManifestPath, editor)
+				cmdExec := exec.Command(editor, p.ManifestPath)
+				cmdExec.Stdin = os.Stdin
+				cmdExec.Stdout = os.Stdout
+				cmdExec.Stderr = os.Stderr
+				_ = cmdExec.Run()
+				fmt.Println("README/Manifest file updated directly.")
+			} else if opt == "2" {
+				fmt.Print("Enter source file path: ")
+				srcPath, _ := reader.ReadString('\n')
+				srcPath = strings.TrimSpace(srcPath)
+				
+				absPath, err := filepath.Abs(srcPath)
+				if err != nil {
+					fmt.Printf("Error resolving path: %v\n", err)
+					return
+				}
+				content, err := os.ReadFile(absPath)
+				if err != nil {
+					fmt.Printf("Error reading source file: %v\n", err)
+					return
+				}
+				err = os.WriteFile(p.ManifestPath, content, 0644)
+				if err != nil {
+					fmt.Printf("Error writing to destination: %v\n", err)
+					return
+				}
+				fmt.Printf("Successfully copied contents of %s to project README (%s)\n", absPath, p.ManifestPath)
+			} else {
+				fmt.Println("Invalid option chosen.")
+			}
+			return
 		default:
 			fmt.Println("Edit cancelled.")
 			return

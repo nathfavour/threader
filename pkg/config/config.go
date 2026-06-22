@@ -25,3 +25,9 @@ func MediaDir() string {
 	_ = os.MkdirAll(path, 0755)
 	return path
 }
+
+func ProjectDir(projectID string) string {
+	path := filepath.Join(DataDir(), "projects", projectID)
+	_ = os.MkdirAll(path, 0755)
+	return path
+}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nathfavour/threader/pkg/config"
 )
 
 type Project struct {
@@ -58,16 +59,27 @@ func (r *Registry) Register(name, desc, voice, site, code string) (*Project, err
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	id := uuid.New().String()
+	manifestPath := filepath.Join(config.ProjectDir(id), "README.md")
+
 	p := &Project{
-		ID:                uuid.New().String(),
+		ID:                id,
 		Name:              name,
 		Description:       desc,
 		BrandVoice:        voice,
 		WebsiteURL:        site,
 		CodebaseURL:       code,
 		CreatedAt:         time.Now(),
+		ManifestPath:      manifestPath,
 		PostIntervalHours: 4, // Default to 4 hours
 	}
+
+	// Write boilerplate
+	boilerplate := fmt.Sprintf(`# %s Brand Manifest
+Place your system architecture description, manifest specifications, and targeted technical vocabulary here.
+The automated Threads post-generation engine will read this file to ground its copy guidelines.
+`, name)
+	_ = os.WriteFile(manifestPath, []byte(boilerplate), 0644)
 
 	r.projects[p.ID] = p
 	return p, r.save()

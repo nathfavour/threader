@@ -140,7 +140,11 @@ Media Context: %s
 
 Output ONLY the raw statement without any CTA or links.%s`, p.Name, manifest, "`", goal, mediaContext.String(), feedbackPrompt)
 
-		resp, err := s.AI.Query(prompt, "vibe", "github-models", "")
+		intent := p.GenerationMode
+		if intent == "" {
+			intent = "completion"
+		}
+		resp, err := s.AI.Query(prompt, intent, "github-models", "")
 		if err != nil {
 			return "", err
 		}
@@ -204,5 +208,9 @@ Product Manifest / Architecture:
 
 Raw reply text only.`, manifest, threadContent, mediaContext.String())
 
-	return s.AI.Query(prompt, "vibe", "github-models", "")
+	intent := p.GenerationMode
+	if intent == "" {
+		intent = "completion"
+	}
+	return s.AI.Query(prompt, intent, "github-models", "")
 }

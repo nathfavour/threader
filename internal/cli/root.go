@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/nathfavour/threader/internal/ai"
 	"github.com/nathfavour/threader/internal/container"
+	"github.com/nathfavour/threader/internal/media"
 	"github.com/nathfavour/threader/internal/project"
 	"github.com/nathfavour/threader/internal/threads"
 	"github.com/nathfavour/threader/pkg/config"
@@ -38,7 +40,7 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		pidFile := config.PIDPath()
 
-		// 1. Handle Kill Flag
+		// 1. Handle Kill Flag (legacy command line support)
 		if kill {
 			handleKill(pidFile)
 			return
@@ -93,35 +95,191 @@ var rootCmd = &cobra.Command{
 
 		fmt.Printf("🧵 Using project: %s\n", selectedProject.Name)
 
-		// 3. Check if already running
-		if pidData, err := os.ReadFile(pidFile); err == nil {
-			pid, _ := strconv.Atoi(string(pidData))
-			if isProcessRunning(pid) {
-				fmt.Printf("🧵 Threader is already running (PID: %d)\n", pid)
+		// 3. Handle systemd user service management as primary daemon
+		if !isDaemon && !verbose {
+			fmt.Println("🧵 Ensuring systemd service configuration...")
+			if err := EnsurePersistence(); err != nil {
+				fmt.Printf("Warning: Could not configure persistence: %v. Falling back to background process.\n", err)
+				daemonize()
 				return
 			}
-		}
 
-		// 4. Handle Daemonization
-		if !isDaemon && !verbose {
-			daemonize()
+			fmt.Println("🧵 Starting/Restarting threader service via systemd...")
+			sysCmd := exec.Command("systemctl", "--user", "restart", "threader.service")
+			if err := sysCmd.Run(); err != nil {
+				fmt.Printf("Warning: failed to start systemd service: %v. Falling back to background process.\n", err)
+				daemonize()
+				return
+			}
+			fmt.Println("✅ Threader daemon started/restarted successfully via systemd user service.")
 			return
 		}
 
-		// 5. Persistence Setup
+		// 4. Standalone/legacy daemon check if --daemon flag is passed directly
 		if isDaemon {
-			if err := EnsurePersistence(); err != nil {
-				fmt.Printf("Warning: Could not configure persistence: %v\n", err)
+			if pidData, err := os.ReadFile(pidFile); err == nil {
+				pid, _ := strconv.Atoi(string(pidData))
+				if isProcessRunning(pid) {
+					fmt.Printf("🧵 Threader is already running (PID: %d)\n", pid)
+					return
+				}
 			}
 		}
 
-		// 6. Dependency Check (Tesseract)
+		// 5. Dependency Check (Tesseract)
 		if err := CheckAndInstallDependencies(); err != nil {
 			fmt.Printf("Warning: Dependency check failed: %v\n", err)
 		}
 
-		// 7. Main process logic
+		// 6. Main process logic
 		startAgent(selectedProject)
+	},
+}
+
+var stopCmd = &cobra.Command{
+	Use:   "stop",
+	Short: "Stop the running threader daemon",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("Stopping threader.service via systemd...")
+		_ = exec.Command("systemctl", "--user", "stop", "threader.service").Run()
+
+		pidFile := config.PIDPath()
+		handleKill(pidFile)
+	},
+}
+
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show status of the threader daemon and projects",
+	Run: func(cmd *cobra.Command, args []string) {
+		pidFile := config.PIDPath()
+
+		sysdOut, err := exec.Command("systemctl", "--user", "is-active", "threader.service").Output()
+		sysdActive := strings.TrimSpace(string(sysdOut)) == "active"
+
+		pidRunning := false
+		pid := 0
+		if pidData, err := os.ReadFile(pidFile); err == nil {
+			pid, _ = strconv.Atoi(string(pidData))
+			if isProcessRunning(pid) {
+				pidRunning = true
+			}
+		}
+
+		fmt.Println("--- Threader Daemon Status ---")
+		if sysdActive {
+			fmt.Println("Status: ACTIVE (Running via systemd)")
+		} else if pidRunning {
+			fmt.Printf("Status: ACTIVE (Running as standalone process, PID: %d)\n", pid)
+		} else {
+			fmt.Println("Status: INACTIVE")
+		}
+
+		reg, _ := project.NewRegistry(config.ProjectsPath())
+		projects := reg.List()
+
+		fmt.Printf("\n--- Configured Projects (%d) ---\n", len(projects))
+		for _, p := range projects {
+			interval := p.PostIntervalHours
+			if interval <= 0 {
+				interval = 4
+			}
+			fmt.Printf("Project: %s (%s)\n", p.Name, p.ID)
+			fmt.Printf("  Interval: %d hours\n", interval)
+			if p.ManifestPath != "" {
+				fmt.Printf("  Manifest: %s\n", p.ManifestPath)
+			} else {
+				fmt.Println("  Manifest: Using default project description")
+			}
+			fmt.Printf("  Last CTA rotated to index: %d\n", p.LastCTAIndex)
+
+			projectMediaDir := filepath.Join(config.MediaDir(), p.ID, "media")
+			files, err := os.ReadDir(projectMediaDir)
+			queuedCount := 0
+			postedCount := 0
+			if err == nil {
+				for _, f := range files {
+					if filepath.Ext(f.Name()) == ".json" {
+						path := filepath.Join(projectMediaDir, f.Name())
+						data, _ := os.ReadFile(path)
+						var asset struct {
+							Posted bool `json:"posted"`
+						}
+						if json.Unmarshal(data, &asset) == nil {
+							if asset.Posted {
+								postedCount++
+							} else {
+								queuedCount++
+							}
+						}
+					}
+				}
+			}
+			fmt.Printf("  Media Queue: %d queued, %d posted\n", queuedCount, postedCount)
+
+			qm := threads.NewQuotaManager(config.DataDir())
+			fmt.Printf("  Quota: %s\n", qm.Status("default"))
+		}
+	},
+}
+
+var queueCmd = &cobra.Command{
+	Use:   "queue",
+	Short: "Manage the media queue for automated posting",
+}
+
+var queueAddCmd = &cobra.Command{
+	Use:   "add [media_path]",
+	Short: "Add a media file to the posting queue",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		projectID, _ := cmd.Flags().GetString("project")
+		mediaPath := args[0]
+
+		reg, _ := project.NewRegistry(config.ProjectsPath())
+		projects := reg.List()
+		if len(projects) == 0 {
+			fmt.Println("Error: No projects found. Run setup first.")
+			return
+		}
+
+		var p *project.Project
+		if projectID == "" {
+			p = projects[0]
+		} else {
+			for _, proj := range projects {
+				if proj.ID == projectID || proj.Name == projectID {
+					p = proj
+					break
+				}
+			}
+		}
+
+		if p == nil {
+			fmt.Printf("Error: Project %q not found.\n", projectID)
+			return
+		}
+
+		absPath, err := filepath.Abs(mediaPath)
+		if err != nil {
+			fmt.Printf("Error resolving media path: %v\n", err)
+			return
+		}
+
+		if _, err := os.Stat(absPath); os.IsNotExist(err) {
+			fmt.Printf("Error: Media file %q does not exist.\n", absPath)
+			return
+		}
+
+		fmt.Printf("🧵 Indexing and queueing media %q for project %s...\n", filepath.Base(absPath), p.Name)
+		engine := media.NewEngine(config.MediaDir())
+		asset, err := engine.IndexMedia(p.ID, absPath)
+		if err != nil {
+			fmt.Printf("Error queueing media: %v\n", err)
+			return
+		}
+
+		fmt.Printf("✅ Successfully added asset to queue! ID: %s\n", asset.ID)
 	},
 }
 
@@ -136,7 +294,7 @@ func handleKill(pidFile string) {
 				fmt.Printf("🧵 Threader (PID: %d) terminated.\n", pid)
 			}
 		} else {
-			fmt.Println("🧵 Threader is not running.")
+			fmt.Println("🧵 Threader background process is not running.")
 		}
 		_ = os.Remove(pidFile)
 	} else {
@@ -249,7 +407,6 @@ func runInitialSetup(m *container.Manager) {
 	}
 
 	if !useExisting {
-		// Create initial project
 		fmt.Println("\n--- Initial Project Setup ---")
 		
 		defaultProjName := c.Name
@@ -290,7 +447,6 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 		return nil
 	}
 
-	// Helper to check if a project is "valid"
 	isValid := func(p *project.Project) bool {
 		return p.AccessToken != ""
 	}
@@ -309,7 +465,6 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 		return nil
 	}
 
-	// Search for valid projects
 	var validProjects []*project.Project
 	for _, p := range projects {
 		if isValid(p) {
@@ -369,7 +524,7 @@ func startAgent(p *project.Project) {
 	ctx := context.Background()
 	go s.Breathes(ctx)
 
-	if isDaemon {
+	if isDaemon || verbose {
 		select {}
 	}
 }
@@ -379,18 +534,14 @@ func isProcessRunning(pid int) bool {
 	if err != nil {
 		return false
 	}
-	// On Unix, FindProcess always succeeds. Need to send signal 0 to check existence.
 	err = process.Signal(syscall.Signal(0))
 	if err != nil {
 		return false
 	}
 
-	// Linux-specific: check the process name to ensure it's actually 'threader'
-	// and not another process that reused the PID.
 	commPath := fmt.Sprintf("/proc/%d/comm", pid)
 	if data, err := os.ReadFile(commPath); err == nil {
 		comm := string(data)
-		// Check if it contains 'threader'
 		return os.Args[0] == "threader" || filepath.Base(os.Args[0]) == "threader" || 
 			   filepath.Base(comm) == "threader\n" || filepath.Base(comm) == "threader"
 	}
@@ -407,6 +558,13 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+
+	rootCmd.AddCommand(stopCmd)
+	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(queueCmd)
+	queueCmd.AddCommand(queueAddCmd)
+
+	queueAddCmd.Flags().StringP("project", "p", "", "Project ID or Name")
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.threader.yaml)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output (run in foreground)")

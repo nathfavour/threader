@@ -139,6 +139,18 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 	}
 	defer db.Close()
 
+	var recentCopies []string
+	rows, err := db.SQL.Query(`SELECT post_text FROM assets WHERE posted = 1 AND post_text IS NOT NULL AND post_text != "" ORDER BY posted_at DESC LIMIT 5`)
+	if err == nil {
+		for rows.Next() {
+			var text string
+			if rows.Scan(&text) == nil {
+				recentCopies = append(recentCopies, text)
+			}
+		}
+		rows.Close()
+	}
+
 	manifest := synthesis.GetProjectManifest(p)
 	client := NewClient(token)
 
@@ -282,7 +294,7 @@ Output ONLY the selected asset ID or 'NONE'. Do not add any text.`, targetPost.T
 			fmt.Printf("MarketingCell: Selected visual asset %s (%s) for reply\n", selectedAsset.ID, filepath.Base(selectedAsset.FilePath))
 		}
 
-		replyText, err := c.Synth.CraftReply(ctx, p, targetPost.Text, assetsForReply)
+		replyText, err := c.Synth.CraftReply(ctx, p, targetPost.Text, assetsForReply, recentCopies)
 		if err != nil {
 			return err
 		}
@@ -321,7 +333,7 @@ Output ONLY the selected asset ID or 'NONE'. Do not add any text.`, targetPost.T
 
 		_ = db.MarkReplied(targetPost.ID)
 		if selectedAsset != nil {
-			_ = db.MarkPosted(selectedAsset.ID, threadID)
+			_ = db.MarkPosted(selectedAsset.ID, threadID, replyText)
 		}
 		c.Quota.RecordPublish(cont.Name)
 		fmt.Printf("MarketingCell: Successfully replied to post %s (Reply ThreadID: %s)\n", targetPost.ID, threadID)
@@ -338,7 +350,7 @@ Output ONLY the selected asset ID or 'NONE'. Do not add any text.`, targetPost.T
 	targetAsset := unposted[0]
 	if err := c.validateMedia(targetAsset); err != nil {
 		fmt.Printf("MarketingCell: Media validation failed for asset %s: %v\n", targetAsset.ID, err)
-		_ = db.MarkPosted(targetAsset.ID, "SKIPPED_INVALID_MEDIA")
+		_ = db.MarkPosted(targetAsset.ID, "SKIPPED_INVALID_MEDIA", "")
 		return nil
 	}
 
@@ -346,7 +358,7 @@ Output ONLY the selected asset ID or 'NONE'. Do not add any text.`, targetPost.T
 	cta, _ := reg.RotateCTA(p.ID)
 
 	goal := "Create a viral marketing post for this product."
-	postText, err := c.Synth.CraftPost(ctx, p, []*media.Asset{targetAsset}, goal, cta)
+	postText, err := c.Synth.CraftPost(ctx, p, []*media.Asset{targetAsset}, goal, cta, recentCopies)
 	if err != nil {
 		return err
 	}
@@ -361,7 +373,7 @@ Output ONLY the selected asset ID or 'NONE'. Do not add any text.`, targetPost.T
 	}
 
 	c.Quota.RecordPublish(cont.Name)
-	_ = db.MarkPosted(targetAsset.ID, threadID)
+	_ = db.MarkPosted(targetAsset.ID, threadID, postText)
 	fmt.Printf("MarketingCell: Successfully fallback-posted to Threads for project %s (ThreadID: %s)\n", p.Name, threadID)
 	return nil
 }

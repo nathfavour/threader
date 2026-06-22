@@ -24,6 +24,7 @@ type Project struct {
 	ManifestPath      string    `json:"manifest_path,omitempty"`
 	LastCTAIndex      int       `json:"last_cta_index"`
 	PostIntervalHours int       `json:"post_interval_hours,omitempty"`
+	PostIntervalMins  int       `json:"post_interval_mins,omitempty"`
 	GenerationMode    string    `json:"generation_mode,omitempty"` // Mode A: "vibe", Mode B: "completion" (default)
 }
 
@@ -72,7 +73,8 @@ func (r *Registry) Register(name, desc, voice, site, code string) (*Project, err
 		CodebaseURL:       code,
 		CreatedAt:         time.Now(),
 		ManifestPath:      manifestPath,
-		PostIntervalHours: 4, // Default to 4 hours
+		PostIntervalHours: 0,
+		PostIntervalMins:  15, // Default to 15 minutes for even, continuous flow
 		GenerationMode:    "completion", // Default to Mode B
 	}
 
@@ -136,6 +138,7 @@ func (r *Registry) Update(id string, name, desc, voice, site, code, token string
 	}
 	if postIntervalHours != 0 {
 		p.PostIntervalHours = postIntervalHours
+		p.PostIntervalMins = 0 // Clear minutes when hours is set
 	}
 	if generationMode != "" {
 		p.GenerationMode = generationMode

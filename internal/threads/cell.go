@@ -100,8 +100,10 @@ func (c *MarketingCell) getLastPostTime(projectID string) (time.Time, error) {
 }
 
 func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, cont *container.Container) error {
+	fmt.Println("DEBUG: Entering processProject")
 	// 0. Check Spacing/Scheduling (Distribute activity over the course of a day)
 	lastPost, err := c.getLastPostTime(p.ID)
+	fmt.Printf("DEBUG: lastPost: %v, err: %v\n", lastPost, err)
 	if err == nil && !lastPost.IsZero() {
 		intervalHours := p.PostIntervalHours
 		if intervalHours <= 0 {
@@ -109,12 +111,15 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 		}
 		minInterval := time.Duration(intervalHours) * time.Hour
 		timeSinceLastPost := time.Since(lastPost)
+		fmt.Printf("DEBUG: timeSinceLastPost: %v, minInterval: %v\n", timeSinceLastPost, minInterval)
 		if timeSinceLastPost < minInterval {
+			fmt.Println("DEBUG: Spacing check failed, returning nil")
 			// Waiting calmly; not time to post/reply yet
 			return nil
 		}
 	}
 
+	fmt.Println("DEBUG: Scanner starting")
 	// 1. Run automatic indexing scanner first to discover and pull in any new images dropped by the user
 	projectMediaDir := filepath.Join(config.MediaDir(), p.ID, "media")
 	projectDir := config.ProjectDir(p.ID)

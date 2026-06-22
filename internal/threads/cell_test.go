@@ -33,11 +33,11 @@ func TestForcePulse(t *testing.T) {
 	cell := NewMarketingCell(aiClient)
 	cell.TargetProjectID = p.ID
 
-	// Temporarily bypass the spacing check
+	// Temporarily bypass the spacing check on disk
 	originalInterval := p.PostIntervalHours
-	p.PostIntervalHours = -1
+	_, _ = reg.Update(p.ID, "", "", "", "", "", "", "", -1, "")
 	defer func() {
-		p.PostIntervalHours = originalInterval
+		_, _ = reg.Update(p.ID, "", "", "", "", "", "", "", originalInterval, "")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

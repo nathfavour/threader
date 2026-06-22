@@ -84,7 +84,7 @@ func ValidatePost(text string) error {
 	return nil
 }
 
-func getProjectManifest(p *project.Project) string {
+func GetProjectManifest(p *project.Project) string {
 	if p.ManifestPath != "" {
 		if data, err := os.ReadFile(p.ManifestPath); err == nil {
 			return string(data)
@@ -94,7 +94,7 @@ func getProjectManifest(p *project.Project) string {
 }
 
 func (s *Synthesizer) CraftPost(ctx context.Context, p *project.Project, assets []*media.Asset, goal string, cta string) (string, error) {
-	manifest := getProjectManifest(p)
+	manifest := GetProjectManifest(p)
 
 	var mediaContext strings.Builder
 	for i, a := range assets {
@@ -176,7 +176,7 @@ Output ONLY the raw statement without any CTA or links.%s`, p.Name, manifest, "`
 }
 
 func (s *Synthesizer) CraftReply(ctx context.Context, p *project.Project, threadContent string, assets []*media.Asset) (string, error) {
-	manifest := getProjectManifest(p)
+	manifest := GetProjectManifest(p)
 
 	var mediaContext strings.Builder
 	for i, a := range assets {

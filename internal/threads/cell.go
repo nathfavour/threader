@@ -3,7 +3,6 @@ package threads
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,7 +75,7 @@ func (c *MarketingCell) getLastPostTime(projectID string) (time.Time, error) {
 	defer db.Close()
 
 	var postedAtStr sql.NullString
-	err = db.db.QueryRow(`SELECT posted_at FROM assets WHERE posted = 1 ORDER BY posted_at DESC LIMIT 1`).Scan(&postedAtStr)
+	err = db.SQL.QueryRow(`SELECT posted_at FROM assets WHERE posted = 1 ORDER BY posted_at DESC LIMIT 1`).Scan(&postedAtStr)
 	if err != nil || !postedAtStr.Valid || postedAtStr.String == "" {
 		return time.Time{}, nil
 	}

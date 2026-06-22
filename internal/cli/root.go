@@ -136,6 +136,14 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+var startCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Start the threader daemon",
+	Run: func(cmd *cobra.Command, args []string) {
+		rootCmd.Run(cmd, args)
+	},
+}
+
 var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop the running threader daemon",
@@ -145,6 +153,7 @@ var stopCmd = &cobra.Command{
 
 		pidFile := config.PIDPath()
 		handleKill(pidFile)
+		fmt.Println("✅ Threader service stopped.")
 	},
 }
 
@@ -288,17 +297,11 @@ func handleKill(pidFile string) {
 		pid, _ := strconv.Atoi(string(pidData))
 		if isProcessRunning(pid) {
 			process, _ := os.FindProcess(pid)
-			if err := process.Signal(syscall.SIGTERM); err != nil {
-				fmt.Printf("Error killing process %d: %v\n", pid, err)
-			} else {
-				fmt.Printf("🧵 Threader (PID: %d) terminated.\n", pid)
+			if err := process.Signal(syscall.SIGTERM); err == nil {
+				fmt.Printf("🧵 Standalone background process (PID: %d) terminated.\n", pid)
 			}
-		} else {
-			fmt.Println("🧵 Threader background process is not running.")
 		}
 		_ = os.Remove(pidFile)
-	} else {
-		fmt.Println("🧵 No PID file found.")
 	}
 }
 
@@ -559,6 +562,7 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
+	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(stopCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(queueCmd)

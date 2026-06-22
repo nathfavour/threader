@@ -14,7 +14,7 @@ import (
 )
 
 type DB struct {
-	db *sql.DB
+	SQL *sql.DB
 }
 
 func OpenDB(projectDir string) (*DB, error) {
@@ -42,15 +42,15 @@ func OpenDB(projectDir string) (*DB, error) {
 		return nil, err
 	}
 
-	return &DB{db: db}, nil
+	return &DB{SQL: db}, nil
 }
 
 func (d *DB) Close() error {
-	return d.db.Close()
+	return d.SQL.Close()
 }
 
 func (d *DB) AddAsset(a *Asset) error {
-	_, err := d.db.Exec(`
+	_, err := d.SQL.Exec(`
 		INSERT INTO assets (id, file_path, ocr_text, ai_summary, uploaded_at, posted, thread_id, posted_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(file_path) DO UPDATE SET
@@ -64,7 +64,7 @@ func (d *DB) AddAsset(a *Asset) error {
 }
 
 func (d *DB) GetUnpostedAssets() ([]*Asset, error) {
-	rows, err := d.db.Query(`SELECT id, file_path, ocr_text, ai_summary, uploaded_at, posted, thread_id, posted_at FROM assets WHERE posted = 0 ORDER BY uploaded_at ASC`)
+	rows, err := d.SQL.Query(`SELECT id, file_path, ocr_text, ai_summary, uploaded_at, posted, thread_id, posted_at FROM assets WHERE posted = 0 ORDER BY uploaded_at ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (d *DB) GetUnpostedAssets() ([]*Asset, error) {
 }
 
 func (d *DB) MarkPosted(id string, threadID string) error {
-	_, err := d.db.Exec(`UPDATE assets SET posted = 1, thread_id = ?, posted_at = ? WHERE id = ?`, threadID, time.Now().Format(time.RFC3339), id)
+	_, err := d.SQL.Exec(`UPDATE assets SET posted = 1, thread_id = ?, posted_at = ? WHERE id = ?`, threadID, time.Now().Format(time.RFC3339), id)
 	return err
 }
 
@@ -134,7 +134,7 @@ func ScanAndIndex(projectID string, projectMediaDir string, projectDir string) e
 			
 			// Check if already indexed
 			var exists bool
-			err := db.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM assets WHERE file_path = ?)`, filePath).Scan(&exists)
+			err := db.SQL.QueryRow(`SELECT EXISTS(SELECT 1 FROM assets WHERE file_path = ?)`, filePath).Scan(&exists)
 			if err != nil || exists {
 				continue
 			}

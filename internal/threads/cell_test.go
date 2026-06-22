@@ -15,7 +15,7 @@ import (
 func TestForcePulse(t *testing.T) {
 	fmt.Println("🧵 Loading project and container...")
 	m := container.NewManager(config.DataDir())
-	_, err = m.GetDefault()
+	_, err := m.GetDefault()
 	if err != nil {
 		t.Fatalf("Error: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -103,13 +104,15 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 	// 0. Check Spacing/Scheduling (Distribute activity over the course of a day)
 	lastPost, err := c.getLastPostTime(p.ID)
 	if err == nil && !lastPost.IsZero() {
-		intervalHours := p.PostIntervalHours
 		var minInterval time.Duration
-		if intervalHours < 0 {
+		if p.PostIntervalMins > 0 {
+			minInterval = time.Duration(p.PostIntervalMins) * time.Minute
+		} else if p.PostIntervalHours < 0 {
 			minInterval = 0
 		} else {
-			if intervalHours == 0 {
-				intervalHours = 4
+			intervalHours := p.PostIntervalHours
+			if intervalHours == 0 && p.PostIntervalMins == 0 {
+				intervalHours = 4 // Fallback if both are empty
 			}
 			minInterval = time.Duration(intervalHours) * time.Hour
 		}
@@ -144,6 +147,7 @@ func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, 
 %s
 
 Generate 3 search keywords or short topics (maximum 3 words each) that target users would post when experiencing pain points that this product solves.
+Ensure each keyword targets a different angle (e.g. tool bloat, offline speed, note-taking frustration, password/credential isolation).
 Output ONLY a JSON array of strings. Do not include markdown formatting or tags. Example: ["notion slow", "markdown editor offline", "password manager alternative"]`, manifest)
 
 	intent := p.GenerationMode
@@ -188,7 +192,7 @@ Output ONLY a JSON array of strings. Do not include markdown formatting or tags.
 				continue
 			}
 
-			// Evaluate if the post is a relevant pain point
+			// Evaluate if the post is a relevant pain point (Score 1-10)
 			evalPrompt := fmt.Sprintf(`Product Manifest:
 %s
 
@@ -196,12 +200,19 @@ User Post:
 "%s"
 
 Evaluate if the user post expresses a genuine problem, frustration, or need that our product directly addresses.
-Output ONLY 'YES' or 'NO'.`, manifest, post.Text)
+Score the post from 1 to 10 based on how likely this user would benefit from our product.
+Output ONLY a single integer score from 1 to 10. Do not write anything else.`, manifest, post.Text)
 
 			evalResp, err := c.AI.Query(evalPrompt, intent, "github-models", "")
-			if err == nil && strings.Contains(strings.ToUpper(evalResp), "YES") {
-				targetPost = &post
-				break
+			if err == nil {
+				cleanedScore := strings.TrimSpace(evalResp)
+				if score, err := strconv.Atoi(cleanedScore); err == nil && score >= 7 {
+					targetPost = &post
+					break
+				} else if strings.Contains(cleanedScore, "7") || strings.Contains(cleanedScore, "8") || strings.Contains(cleanedScore, "9") || strings.Contains(cleanedScore, "10") {
+					targetPost = &post
+					break
+				}
 			}
 		}
 		if targetPost != nil {

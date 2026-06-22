@@ -189,12 +189,16 @@ var statusCmd = &cobra.Command{
 
 		fmt.Printf("\n--- Configured Projects (%d) ---\n", len(projects))
 		for _, p := range projects {
-			interval := p.PostIntervalHours
-			if interval <= 0 {
-				interval = 4
-			}
 			fmt.Printf("Project: %s (%s)\n", p.Name, p.ID)
-			fmt.Printf("  Interval: %d hours\n", interval)
+			if p.PostIntervalMins > 0 {
+				fmt.Printf("  Interval: %d minutes\n", p.PostIntervalMins)
+			} else {
+				interval := p.PostIntervalHours
+				if interval <= 0 && p.PostIntervalMins == 0 {
+					interval = 4
+				}
+				fmt.Printf("  Interval: %d hours\n", interval)
+			}
 			if p.ManifestPath != "" {
 				fmt.Printf("  Manifest: %s\n", p.ManifestPath)
 			} else {

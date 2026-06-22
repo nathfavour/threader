@@ -154,7 +154,7 @@ var statusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		pidFile := config.PIDPath()
 
-		sysdOut, err := exec.Command("systemctl", "--user", "is-active", "threader.service").Output()
+		sysdOut, _ := exec.Command("systemctl", "--user", "is-active", "threader.service").Output()
 		sysdActive := strings.TrimSpace(string(sysdOut)) == "active"
 
 		pidRunning := false

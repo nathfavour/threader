@@ -39,6 +39,12 @@ type Client struct {
 
 func NewClient() *Client {
 	home, _ := os.UserHomeDir()
+	polyPath := filepath.Join(home, ".polygeist", "run", "vibeaura.sock")
+	if _, err := os.Stat(polyPath); err == nil {
+		return &Client{
+			socketPath: polyPath,
+		}
+	}
 	return &Client{
 		socketPath: filepath.Join(home, ".vibeauracle", "vibeaura.sock"),
 	}

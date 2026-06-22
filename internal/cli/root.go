@@ -232,6 +232,29 @@ var statusCmd = &cobra.Command{
 	},
 }
 
+var logsCmd = &cobra.Command{
+	Use:     "logs",
+	Aliases: []string{"log"},
+	Short:   "Show real-time logs from the threader daemon",
+	Run: func(cmd *cobra.Command, args []string) {
+		sysdOut, _ := exec.Command("systemctl", "--user", "is-active", "threader.service").Output()
+		sysdActive := strings.TrimSpace(string(sysdOut)) == "active"
+
+		var logCmd *exec.Cmd
+		if sysdActive {
+			logCmd = exec.Command("journalctl", "--user", "-u", "threader.service", "-f", "-n", "50")
+		} else {
+			logPath := filepath.Join(config.DataDir(), "threader.log")
+			logCmd = exec.Command("tail", "-f", logPath, "-n", "50")
+		}
+
+		logCmd.Stdin = os.Stdin
+		logCmd.Stdout = os.Stdout
+		logCmd.Stderr = os.Stderr
+		_ = logCmd.Run()
+	},
+}
+
 var queueCmd = &cobra.Command{
 	Use:   "queue",
 	Short: "Manage the media queue for automated posting",
@@ -565,6 +588,7 @@ func init() {
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(stopCmd)
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(queueCmd)
 	queueCmd.AddCommand(queueAddCmd)
 

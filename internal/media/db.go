@@ -35,6 +35,10 @@ func OpenDB(projectDir string) (*DB, error) {
 		posted INTEGER,
 		thread_id TEXT,
 		posted_at TEXT
+	);
+	CREATE TABLE IF NOT EXISTS replied_threads (
+		parent_thread_id TEXT PRIMARY KEY,
+		replied_at TEXT
 	);`
 	_, err = db.Exec(schema)
 	if err != nil {
@@ -43,6 +47,17 @@ func OpenDB(projectDir string) (*DB, error) {
 	}
 
 	return &DB{SQL: db}, nil
+}
+
+func (d *DB) HasReplied(parentThreadID string) (bool, error) {
+	var exists bool
+	err := d.SQL.QueryRow(`SELECT EXISTS(SELECT 1 FROM replied_threads WHERE parent_thread_id = ?)`, parentThreadID).Scan(&exists)
+	return exists, err
+}
+
+func (d *DB) MarkReplied(parentThreadID string) error {
+	_, err := d.SQL.Exec(`INSERT INTO replied_threads (parent_thread_id, replied_at) VALUES (?, ?) ON CONFLICT DO NOTHING`, parentThreadID, time.Now().Format(time.RFC3339))
+	return err
 }
 
 func (d *DB) Close() error {

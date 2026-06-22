@@ -12,14 +12,17 @@ import (
 )
 
 type Project struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	BrandVoice  string    `json:"brand_voice"`
-	WebsiteURL  string    `json:"website_url,omitempty"`
-	CodebaseURL string    `json:"codebase_url,omitempty"`
-	AccessToken string    `json:"access_token,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Description       string    `json:"description"`
+	BrandVoice        string    `json:"brand_voice"`
+	WebsiteURL        string    `json:"website_url,omitempty"`
+	CodebaseURL       string    `json:"codebase_url,omitempty"`
+	AccessToken       string    `json:"access_token,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	ManifestPath      string    `json:"manifest_path,omitempty"`
+	LastCTAIndex      int       `json:"last_cta_index"`
+	PostIntervalHours int       `json:"post_interval_hours,omitempty"`
 }
 
 type Registry struct {
@@ -56,13 +59,14 @@ func (r *Registry) Register(name, desc, voice, site, code string) (*Project, err
 	defer r.mu.Unlock()
 
 	p := &Project{
-		ID:          uuid.New().String(),
-		Name:        name,
-		Description: desc,
-		BrandVoice:  voice,
-		WebsiteURL:  site,
-		CodebaseURL: code,
-		CreatedAt:   time.Now(),
+		ID:                uuid.New().String(),
+		Name:              name,
+		Description:       desc,
+		BrandVoice:        voice,
+		WebsiteURL:        site,
+		CodebaseURL:       code,
+		CreatedAt:         time.Now(),
+		PostIntervalHours: 4, // Default to 4 hours
 	}
 
 	r.projects[p.ID] = p
@@ -86,7 +90,7 @@ func (r *Registry) List() []*Project {
 	return list
 }
 
-func (r *Registry) Update(id string, name, desc, voice, site, code, token string) (*Project, error) {
+func (r *Registry) Update(id string, name, desc, voice, site, code, token string, manifestPath string, postIntervalHours int) (*Project, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -112,6 +116,12 @@ func (r *Registry) Update(id string, name, desc, voice, site, code, token string
 	}
 	if token != "" {
 		p.AccessToken = token
+	}
+	if manifestPath != "" {
+		p.ManifestPath = manifestPath
+	}
+	if postIntervalHours > 0 {
+		p.PostIntervalHours = postIntervalHours
 	}
 
 	return p, r.save()

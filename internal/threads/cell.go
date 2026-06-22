@@ -100,20 +100,21 @@ func (c *MarketingCell) getLastPostTime(projectID string) (time.Time, error) {
 }
 
 func (c *MarketingCell) processProject(ctx context.Context, p *project.Project, cont *container.Container) error {
-	fmt.Println("DEBUG: Entering processProject")
 	// 0. Check Spacing/Scheduling (Distribute activity over the course of a day)
 	lastPost, err := c.getLastPostTime(p.ID)
-	fmt.Printf("DEBUG: lastPost: %v, err: %v\n", lastPost, err)
 	if err == nil && !lastPost.IsZero() {
 		intervalHours := p.PostIntervalHours
-		if intervalHours <= 0 {
-			intervalHours = 4 // default to 4 hours
+		var minInterval time.Duration
+		if intervalHours < 0 {
+			minInterval = 0
+		} else {
+			if intervalHours == 0 {
+				intervalHours = 4
+			}
+			minInterval = time.Duration(intervalHours) * time.Hour
 		}
-		minInterval := time.Duration(intervalHours) * time.Hour
 		timeSinceLastPost := time.Since(lastPost)
-		fmt.Printf("DEBUG: timeSinceLastPost: %v, minInterval: %v\n", timeSinceLastPost, minInterval)
 		if timeSinceLastPost < minInterval {
-			fmt.Println("DEBUG: Spacing check failed, returning nil")
 			// Waiting calmly; not time to post/reply yet
 			return nil
 		}

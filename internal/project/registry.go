@@ -134,7 +134,7 @@ func (r *Registry) Update(id string, name, desc, voice, site, code, token string
 	if manifestPath != "" {
 		p.ManifestPath = manifestPath
 	}
-	if postIntervalHours > 0 {
+	if postIntervalHours != 0 {
 		p.PostIntervalHours = postIntervalHours
 	}
 	if generationMode != "" {

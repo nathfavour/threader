@@ -68,14 +68,15 @@ var projectEditCmd = &cobra.Command{
 		fmt.Printf("6) Manifest Path [%s]\n", p.ManifestPath)
 		fmt.Printf("7) Post Interval (Hours) [%d]\n", p.PostIntervalHours)
 		fmt.Printf("8) Generation Mode [%s]\n", p.GenerationMode)
-		fmt.Printf("9) Edit README/Manifest File directly\n")
-		fmt.Printf("10) Cancel\n")
-		fmt.Print("Select parameter to edit (1-10): ")
+		fmt.Printf("9) Threads Access Token [%s]\n", maskToken(p.AccessToken))
+		fmt.Printf("10) Edit README/Manifest File directly\n")
+		fmt.Printf("11) Cancel\n")
+		fmt.Print("Select parameter to edit (1-11): ")
 
 		choice, _ := reader.ReadString('\n')
 		choice = strings.TrimSpace(choice)
 
-		var name, desc, voice, site, code, manifestPath, generationMode string
+		var name, desc, voice, site, code, token, manifestPath, generationMode string
 		var interval int
 
 		switch choice {
@@ -115,6 +116,10 @@ var projectEditCmd = &cobra.Command{
 			generationMode, _ = reader.ReadString('\n')
 			generationMode = strings.TrimSpace(generationMode)
 		case "9":
+			fmt.Print("Enter new Threads Access Token: ")
+			token, _ = reader.ReadString('\n')
+			token = strings.TrimSpace(token)
+		case "10":
 			if p.ManifestPath == "" {
 				p.ManifestPath = filepath.Join(config.ProjectDir(p.ID), "README.md")
 				_, _ = reg.Update(p.ID, "", "", "", "", "", "", p.ManifestPath, 0, "")
@@ -168,7 +173,7 @@ var projectEditCmd = &cobra.Command{
 			return
 		}
 
-		updated, err := reg.Update(p.ID, name, desc, voice, site, code, "", manifestPath, interval, generationMode)
+		updated, err := reg.Update(p.ID, name, desc, voice, site, code, token, manifestPath, interval, generationMode)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
@@ -219,4 +224,11 @@ var projectListCmd = &cobra.Command{
 			fmt.Printf("- %s (%s)\n", p.Name, p.ID)
 		}
 	},
+}
+
+func maskToken(token string) string {
+	if len(token) <= 8 {
+		return "*****"
+	}
+	return token[:4] + "..." + token[len(token)-4:]
 }

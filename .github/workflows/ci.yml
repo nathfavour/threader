@@ -1,0 +1,51 @@
+name: CI & Ota Execution Governance
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+    branches:
+      - master
+      - main
+
+jobs:
+  ota-verification:
+    name: Ota Execution & Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: true
+
+      - name: Install System Dependencies (Tesseract OCR & Leptonica)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtesseract-dev libleptonica-dev tesseract-ocr
+
+      - name: Setup Ota
+        uses: ota-run/setup@v1
+        with:
+          source: contract
+
+      - name: Validate Ota Contract
+        run: |
+          ota validate
+
+      - name: Run Ota Doctor
+        run: |
+          ota doctor
+
+      - name: Run Tests via Ota Execution Governance
+        run: |
+          ota run test
+
+      - name: Build Binary via Ota Execution Governance
+        run: |
+          ota run build

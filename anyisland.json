@@ -1,7 +1,7 @@
 {
   "name": "threader",
-  "version": "0.1.0",
-  "description": "Autonomous agentic system for Meta Threads marketing.",
+  "version": "0.2.0",
+  "description": "Autonomous multi-platform marketing engine for Nostr, Threads, and decentralized networks.",
   "repository": "github.com/nathfavour/threader",
   "source_dir": "~/.threader/source",
   "install_dir": "~/.local/bin",

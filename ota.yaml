@@ -54,6 +54,7 @@ agent:
   - ARCHITECTURE.md
   - AGENTS.md
   protected_paths:
+  - .github
   - go.mod
   - go.sum
   - ota.yaml

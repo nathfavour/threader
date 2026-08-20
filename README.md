@@ -48,12 +48,15 @@ ota run test
 ota run build
 ```
 
-### Anyisland Setup (Runtime Deployment)
-[Anyisland](anyisland.json) handles isolated container environments and system services:
+### Anyisland Ingestion & Tool Management
+[Anyisland](https://github.com/nathfavour/anyisland) is a decentralized package manager. Threader exposes an [`anyisland.json`](anyisland.json) manifest defining its build steps, Tesseract/Leptonica runtime dependencies, and pulse heartbeat:
 
 ```bash
-# Start or verify Anyisland environment
-anyisland up
+# Ingest and install Threader into your local Island
+anyisland ingest github.com/nathfavour/threader
+
+# List installed tools
+anyisland list
 ```
 
 ---

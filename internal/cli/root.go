@@ -16,9 +16,11 @@ import (
 	"github.com/nathfavour/threader/internal/ai"
 	"github.com/nathfavour/threader/internal/container"
 	"github.com/nathfavour/threader/internal/media"
+	"github.com/nathfavour/threader/internal/orchestrator"
 	"github.com/nathfavour/threader/internal/project"
 	"github.com/nathfavour/threader/internal/threads"
 	"github.com/nathfavour/threader/pkg/config"
+	"github.com/nathfavour/threader/pkg/nostrutil"
 	"github.com/nathfavour/threader/pkg/spine"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -35,8 +37,8 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "threader",
-	Short: "Threader is an agentic marketing system for Threads",
-	Long:  `A specialized agent that handles product marketing on Meta's Threads platform using AI and OCR.`,
+	Short: "Threader is a multi-platform autonomous marketing system (Nostr, Threads)",
+	Long:  `An extensible, agentic publishing and engagement engine that automates marketing across Nostr, Meta's Threads, and modular platform drivers using AI and OCR.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		pidFile := config.PIDPath()
 
@@ -49,7 +51,7 @@ var rootCmd = &cobra.Command{
 		// 2. Validate Configs and Setup
 		m := container.NewManager(config.DataDir())
 		reg, _ := project.NewRegistry(config.ProjectsPath())
-		
+
 		selectedProject := validateAndSelectProject(m, reg, targetProject)
 		if selectedProject == nil {
 			list, _ := m.List()
@@ -59,7 +61,7 @@ var rootCmd = &cobra.Command{
 				runInitialSetup(m)
 				selectedProject = validateAndSelectProject(m, reg, targetProject)
 			} else {
-				fmt.Println("⚠️  No project with a valid Threads token found.")
+				fmt.Println("⚠️  No project with a valid target (Nostr or Threads) found.")
 				fmt.Println("--- Project Configuration ---")
 				if len(projects) > 0 {
 					fmt.Println("Existing projects found:")
@@ -68,15 +70,15 @@ var rootCmd = &cobra.Command{
 					}
 					fmt.Printf("%d) Create new persona/project\n", len(projects)+1)
 					fmt.Print("Select an option (index): ")
-					
+
 					reader := bufio.NewReader(os.Stdin)
 					choice, _ := reader.ReadString('\n')
 					choice = strings.TrimSpace(choice)
 					idx, err := strconv.Atoi(choice)
-					
+
 					if err == nil && idx >= 1 && idx <= len(projects) {
 						configureProject(projects[idx-1])
-						selectedProject = projects[idx-1]
+						selectedProject = validateAndSelectProject(m, reg, targetProject)
 					} else if choice == "" || idx == len(projects)+1 {
 						runInitialSetup(m)
 						selectedProject = validateAndSelectProject(m, reg, targetProject)
@@ -86,7 +88,7 @@ var rootCmd = &cobra.Command{
 					selectedProject = validateAndSelectProject(m, reg, targetProject)
 				}
 			}
-			
+
 			if selectedProject == nil {
 				fmt.Println("❌ Could not resolve a valid project configuration. Exiting.")
 				os.Exit(1)
@@ -189,6 +191,7 @@ var statusCmd = &cobra.Command{
 
 		fmt.Printf("\n--- Configured Projects (%d) ---\n", len(projects))
 		for _, p := range projects {
+			p.EnsurePlatforms()
 			fmt.Printf("Project: %s (%s)\n", p.Name, p.ID)
 			if p.PostIntervalMins > 0 {
 				fmt.Printf("  Interval: %d minutes\n", p.PostIntervalMins)
@@ -205,6 +208,24 @@ var statusCmd = &cobra.Command{
 				fmt.Println("  Manifest: Using default project description")
 			}
 			fmt.Printf("  Last CTA rotated to index: %d\n", p.LastCTAIndex)
+
+			// Show target statuses
+			nostrCfg := p.GetPlatformConfig("nostr")
+			nostrStatus := "disabled"
+			if nostrCfg != nil && nostrCfg.Enabled {
+				nostrStatus = "ENABLED"
+				if nostrCfg.Npub != "" {
+					nostrStatus += fmt.Sprintf(" (%s)", nostrCfg.Npub)
+				}
+			}
+			fmt.Printf("  Target [Nostr]: %s\n", nostrStatus)
+
+			threadsCfg := p.GetPlatformConfig("threads")
+			threadsStatus := "disabled"
+			if threadsCfg != nil && threadsCfg.Enabled {
+				threadsStatus = "ENABLED"
+			}
+			fmt.Printf("  Target [Threads]: %s\n", threadsStatus)
 
 			projectMediaDir := filepath.Join(config.MediaDir(), p.ID, "media")
 			files, err := os.ReadDir(projectMediaDir)
@@ -337,7 +358,7 @@ func daemonize() {
 	logFile, _ := os.OpenFile(filepath.Join(config.DataDir(), "threader.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	daemonCmd.Stdout = logFile
 	daemonCmd.Stderr = logFile
-	
+
 	if err := daemonCmd.Start(); err != nil {
 		fmt.Printf("Error starting daemon: %v\n", err)
 		os.Exit(1)
@@ -347,21 +368,44 @@ func daemonize() {
 }
 
 func configureProject(p *project.Project) {
-	fmt.Printf("\n--- Configuring Project: %s ---\n", p.Name)
+	fmt.Printf("\n--- Configuring Targets for Project: %s ---\n", p.Name)
 	reader := bufio.NewReader(os.Stdin)
+	p.EnsurePlatforms()
 
-	fmt.Print("Enter Threads Access Token: ")
+	fmt.Print("Enter Nostr Private Key (nsec1... or hex, or press enter to skip): ")
+	nsec, _ := reader.ReadString('\n')
+	nsec = strings.TrimSpace(nsec)
+
+	reg, _ := project.NewRegistry(config.ProjectsPath())
+
+	if nsec != "" {
+		nostrCfg := p.GetPlatformConfig("nostr")
+		if nostrCfg == nil {
+			nostrCfg = &project.PlatformConfig{Enabled: true}
+		}
+		nostrCfg.Enabled = true
+		nostrCfg.Nsec = nsec
+		if pubHex, err := nostrutil.GetPublicKeyHex(nsec); err == nil {
+			if npub, err := nostrutil.EncodeNpub(pubHex); err == nil {
+				nostrCfg.Npub = npub
+				fmt.Printf("✅ Nostr target enabled. Derived Npub: %s\n", npub)
+			}
+		}
+		_, _ = reg.UpdatePlatform(p.ID, "nostr", nostrCfg)
+	}
+
+	fmt.Print("Enter Threads Access Token (or press enter to skip): ")
 	token, _ := reader.ReadString('\n')
 	token = strings.TrimSpace(token)
 
 	if token != "" {
-		reg, _ := project.NewRegistry(config.ProjectsPath())
-		_, err := reg.Update(p.ID, "", "", "", "", "", token, "", 0, "")
-		if err != nil {
-			fmt.Printf("❌ Error saving token: %v\n", err)
-		} else {
-			fmt.Printf("✅ Token saved locally for project %s\n", p.Name)
+		threadsCfg := &project.PlatformConfig{
+			Enabled:     true,
+			AccessToken: token,
 		}
+		_, _ = reg.UpdatePlatform(p.ID, "threads", threadsCfg)
+		_, _ = reg.Update(p.ID, "", "", "", "", "", token, "", 0, "")
+		fmt.Printf("✅ Threads target enabled with token for project %s\n", p.Name)
 	}
 }
 
@@ -438,7 +482,7 @@ func runInitialSetup(m *container.Manager) {
 
 	if !useExisting {
 		fmt.Println("\n--- Initial Project Setup ---")
-		
+
 		defaultProjName := c.Name
 		fmt.Printf("Enter Project Name (default: %q): ", defaultProjName)
 		projName, _ := reader.ReadString('\n')
@@ -478,7 +522,7 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 	}
 
 	isValid := func(p *project.Project) bool {
-		return p.AccessToken != ""
+		return p.HasValidTarget()
 	}
 
 	if target != "" {
@@ -487,7 +531,7 @@ func validateAndSelectProject(m *container.Manager, reg *project.Registry, targe
 				if isValid(p) {
 					return p
 				}
-				fmt.Printf("⚠️  Project %q found but is not fully configured (missing token).\n", p.Name)
+				fmt.Printf("⚠️  Project %q found but has no active configured target (Nostr nsec or Threads token).\n", p.Name)
 				return nil
 			}
 		}
@@ -532,7 +576,7 @@ func startAgent(p *project.Project) {
 	}
 
 	_ = os.WriteFile(config.PIDPath(), []byte(strconv.Itoa(os.Getpid())), 0644)
-	
+
 	m := container.NewManager(config.DataDir())
 	active, err := m.GetDefault()
 	if err == nil {
@@ -541,16 +585,16 @@ func startAgent(p *project.Project) {
 
 	// Initialize Spine
 	s := spine.NewSpine(30 * time.Second)
-	
+
 	// Attach Cells
 	aiClient := ai.NewClient()
-	marketingCell := threads.NewMarketingCell(aiClient)
+	marketingCell := orchestrator.NewMarketingCell(aiClient)
 	marketingCell.TargetProjectID = p.ID
-	
+
 	s.Attach(marketingCell)
 
 	fmt.Println("🧵 Threader daemon is active.")
-	
+
 	ctx := context.Background()
 	go s.Breathes(ctx)
 
@@ -572,8 +616,8 @@ func isProcessRunning(pid int) bool {
 	commPath := fmt.Sprintf("/proc/%d/comm", pid)
 	if data, err := os.ReadFile(commPath); err == nil {
 		comm := string(data)
-		return os.Args[0] == "threader" || filepath.Base(os.Args[0]) == "threader" || 
-			   filepath.Base(comm) == "threader\n" || filepath.Base(comm) == "threader"
+		return os.Args[0] == "threader" || filepath.Base(os.Args[0]) == "threader" ||
+			filepath.Base(comm) == "threader\n" || filepath.Base(comm) == "threader"
 	}
 
 	return true

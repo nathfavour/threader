@@ -10,6 +10,8 @@ import (
 
 	"github.com/nathfavour/threader/internal/ai"
 	"github.com/nathfavour/threader/internal/media"
+	"github.com/nathfavour/threader/internal/orchestrator"
+	"github.com/nathfavour/threader/internal/platform"
 	"github.com/nathfavour/threader/internal/project"
 	"github.com/nathfavour/threader/internal/synthesis"
 	"github.com/nathfavour/threader/internal/threads"
@@ -27,14 +29,16 @@ func init() {
 	postCraftCmd.Flags().String("manual", "", "Manually provide post content")
 	postCraftCmd.Flags().Lookup("manual").NoOptDefVal = "PROMPT"
 	postCraftCmd.Flags().String("media", "", "Path to media file (image/video)")
+	postCraftCmd.Flags().StringP("target", "t", "", "Target platform(s) comma-separated (e.g. nostr, threads). Defaults to all enabled")
 
 	postPublishCmd.Flags().StringP("project", "p", "", "Project ID or Name (defaults to first project)")
 	postPublishCmd.Flags().String("media", "", "Path to media file")
+	postPublishCmd.Flags().StringP("target", "t", "", "Target platform(s) comma-separated (e.g. nostr, threads). Defaults to all enabled")
 }
 
 var postCmd = &cobra.Command{
 	Use:   "post",
-	Short: "Manage Threads posts",
+	Short: "Manage multi-platform posts (Nostr, Threads, etc.)",
 }
 
 var postCraftCmd = &cobra.Command{
@@ -45,6 +49,7 @@ var postCraftCmd = &cobra.Command{
 		goal, _ := cmd.Flags().GetString("goal")
 		manual, _ := cmd.Flags().GetString("manual")
 		mediaPath, _ := cmd.Flags().GetString("media")
+		targetFlag, _ := cmd.Flags().GetString("target")
 
 		reg, _ := project.NewRegistry(config.ProjectsPath())
 		projects := reg.List()
@@ -78,7 +83,7 @@ var postCraftCmd = &cobra.Command{
 				fmt.Printf("Error resolving media path: %v\n", err)
 				return
 			}
-			
+
 			if _, err := os.Stat(absPath); os.IsNotExist(err) {
 				fmt.Printf("Error: Media file %q does not exist.\n", absPath)
 				return
@@ -131,23 +136,34 @@ var postCraftCmd = &cobra.Command{
 		}
 		fmt.Println(postText)
 		fmt.Println("--------------------")
-		
+
+		var targets []string
+		if targetFlag != "" {
+			for _, t := range strings.Split(targetFlag, ",") {
+				trimmed := strings.TrimSpace(t)
+				if trimmed != "" {
+					targets = append(targets, trimmed)
+				}
+			}
+		}
+
 		fmt.Print("Publish now? (y/N): ")
 		reader := bufio.NewReader(os.Stdin)
 		ans, _ := reader.ReadString('\n')
 		if strings.ToLower(strings.TrimSpace(ans)) == "y" {
-			publishToProject(p, postText, asset)
+			publishToProject(p, postText, asset, targets)
 		}
 	},
 }
 
 var postPublishCmd = &cobra.Command{
 	Use:   "publish [text]",
-	Short: "Publish a post to Threads",
+	Short: "Publish a post to configured targets (Nostr, Threads)",
 	Run: func(cmd *cobra.Command, args []string) {
 		projectID, _ := cmd.Flags().GetString("project")
 		mediaPath, _ := cmd.Flags().GetString("media")
-		
+		targetFlag, _ := cmd.Flags().GetString("target")
+
 		reg, _ := project.NewRegistry(config.ProjectsPath())
 		projects := reg.List()
 		if len(projects) == 0 {
@@ -189,73 +205,65 @@ var postPublishCmd = &cobra.Command{
 			text = strings.TrimSpace(text)
 		}
 
-		publishToProject(p, text, asset)
+		var targets []string
+		if targetFlag != "" {
+			for _, t := range strings.Split(targetFlag, ",") {
+				trimmed := strings.TrimSpace(t)
+				if trimmed != "" {
+					targets = append(targets, trimmed)
+				}
+			}
+		}
+
+		publishToProject(p, text, asset, targets)
 	},
 }
 
-func publishToProject(p *project.Project, text string, asset *media.Asset) {
-	if p.AccessToken == "" {
-		fmt.Printf("Error: Threads token not found for project %q.\n", p.Name)
-		return
-	}
-
-	client := threads.NewClient(p.AccessToken)
-	
-	var id string
-	var err error
+func publishToProject(p *project.Project, text string, asset *media.Asset, targets []string) {
+	var mediaURLs []string
+	var cleanup func()
 
 	if asset != nil {
 		fmt.Printf("🧵 Preparing media for project %q...\n", p.Name)
-		
 		mediaURL := asset.FilePath
-		var cleanup func()
 
 		// If it's a local file, set up transient hosting
 		if !strings.HasPrefix(asset.FilePath, "http") {
 			fmt.Println("🧵 Starting transient hosting via localhost.run...")
 			u, c, err := threads.HostLocalFile(asset.FilePath)
 			if err != nil {
-				fmt.Printf("Error setting up transient hosting: %v\n", err)
-				return
+				fmt.Printf("Warning: Failed to set up transient hosting: %v\n", err)
+			} else {
+				mediaURL = u
+				cleanup = c
+				fmt.Printf("🧵 Media temporarily hosted at: %s\n", mediaURL)
 			}
-			mediaURL = u
-			cleanup = c
-			fmt.Printf("🧵 Media temporarily hosted at: %s\n", mediaURL)
 		}
 
 		if cleanup != nil {
 			defer cleanup()
 		}
 
-		ext := strings.ToLower(filepath.Ext(asset.FilePath))
-		if ext == ".mp4" || ext == ".mov" {
-			// Video publishing logic
-			fmt.Println("⚠️  Video publishing requires processing time on Meta servers.")
-			// Note: For videos, Step 1 creates a container, but we might need to poll for status.
-			// Simple implementation for now.
-			containerID, err := client.CreateImageContainer(mediaURL, text) // Reuse container logic for now if possible or update Client
-			if err != nil {
-				fmt.Printf("Error creating media container: %v\n", err)
-				return
-			}
-			id, err = client.PublishContainer(containerID)
-		} else {
-			// Image publishing logic
-			containerID, err := client.CreateImageContainer(mediaURL, text)
-			if err != nil {
-				fmt.Printf("Error creating image container: %v\n", err)
-				return
-			}
-			id, err = client.PublishContainer(containerID)
+		mediaURLs = append(mediaURLs, mediaURL)
+	}
+
+	content := platform.PostContent{
+		Text:      text,
+		MediaURLs: mediaURLs,
+	}
+
+	dispatcher := orchestrator.NewDispatcher()
+	results, errors := dispatcher.Dispatch(context.Background(), p, content, targets...)
+
+	if len(results) > 0 {
+		for _, res := range results {
+			fmt.Printf("✅ Published successfully to [%s]!\n   Post ID: %s\n   URL: %s\n", strings.ToUpper(res.Platform), res.PostID, res.URL)
 		}
-	} else {
-		id, err = client.CreateTextPost(text)
 	}
 
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return
+	if len(errors) > 0 {
+		for _, err := range errors {
+			fmt.Printf("⚠️  Publish error: %v\n", err)
+		}
 	}
-
-	fmt.Printf("✅ Published successfully to project %q! Post ID: %s\n", p.Name, id)
 }

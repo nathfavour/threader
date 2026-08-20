@@ -1,6 +1,10 @@
-
-# Added by Autocommiter SECURE_MODE:
+# Binaries
 threader
-
-# Added by Autocommiter SECURE_MODE:
 threader_test
+bin/
+
+# Ota state and receipts
+.ota/state/
+.ota/contracts/
+.ota/receipts/
+.ota/proof/

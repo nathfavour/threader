@@ -3,6 +3,9 @@ BINARY_NAME=threader
 build:
 	bash install.sh
 
+test:
+	go test -v ./...
+
 clean:
 	rm -f $(BINARY_NAME)
 

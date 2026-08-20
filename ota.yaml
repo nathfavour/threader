@@ -1,0 +1,75 @@
+version: 1
+project:
+  name: threader
+  description: "Autonomous multi-platform marketing engine for Nostr, Threads, and decentralized platforms"
+
+toolchains:
+  go:
+    version: 1.25.5
+
+tools:
+  bash: '*'
+  make: '*'
+
+tasks:
+  build:
+    command:
+      exe: make
+      args:
+      - build
+    notes: |
+      Run `ota run build` to build the threader binary.
+    safe_for_agent: true
+
+  test:
+    command:
+      exe: make
+      args:
+      - test
+    notes: |
+      Run `ota run test` to execute test suite.
+    safe_for_agent: true
+
+  run:
+    command:
+      exe: make
+      args:
+      - run
+    notes: |
+      Run `ota run run` to build and execute threader CLI.
+
+agent:
+  posture: readiness_strict
+  default_task: test
+  safe_tasks:
+  - test
+  - build
+  verify_after_changes:
+  - test
+  writable_paths:
+  - cmd
+  - internal
+  - pkg
+  - README.md
+  - ARCHITECTURE.md
+  - AGENTS.md
+  protected_paths:
+  - go.mod
+  - go.sum
+  - ota.yaml
+  inferred_boundary:
+    reviewed: true
+    provenance:
+      writable_paths:
+      - detect:common_source_roots
+      - detect:stack_source_scan
+      protected_paths:
+      - detect:contract_file_default
+      - detect:detected_control_files
+      - detect:stack_companion_control_files
+  bootstrap:
+    ota:
+      note: Only install ota if it is missing and installation is approved.
+      source:
+        kind: version
+        version: v1.6.25

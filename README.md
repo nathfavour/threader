@@ -15,59 +15,84 @@ Threader is an autonomous, multi-platform marketing and engagement engine. It co
 
 ---
 
-## 🚀 Quick Setup
+## 📦 Installation
 
-### 1. Installation
+Threader is distributed and managed for end users via [Anyisland](https://github.com/nathfavour/anyisland), a decentralized, platform-agnostic package manager that resolves runtime system dependencies and builds the application binary automatically.
+
+### 1. Install Anyisland
 
 ```bash
-# Clone the repository
-git clone https://github.com/nathfavour/threader.git
-cd threader
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/nathfavour/anyisland/master/install.sh | bash
+```
 
-# Build binary
-make build
-# or using Ota:
-ota run build
+### 2. Initialize Island Environment
+
+```bash
+anyisland setup
+```
+
+### 3. Ingest and Install Threader
+
+```bash
+anyisland ingest github.com/nathfavour/threader
+```
+
+*Direct script install fallback:*
+```bash
+curl -fsSL https://raw.githubusercontent.com/nathfavour/threader/master/install.sh | bash
 ```
 
 ---
 
-## 🛠️ Execution Governance & Tooling
+## 🛠️ Contributing & Development
 
-### Ota (Execution Governance & Verification)
-[Ota](https://ota.run) provides deterministic execution governance and developer/CI verification.
+Threader's development lifecycle, verification gates, and agent safety policies are governed deterministically by [Ota](https://ota.run).
+
+### 1. Clone the Repository
 
 ```bash
-# Install Ota (macOS / Linux)
+git clone https://github.com/nathfavour/threader.git
+cd threader
+```
+
+### 2. Install Ota
+
+```bash
+# macOS / Linux
 curl -fsSL https://dist.ota.run/install.sh | sh
 
-# Install Ota (Windows PowerShell)
+# Windows PowerShell
 irm https://dist.ota.run/install.ps1 | iex
+```
 
-# Verify workspace contract and dependencies
+### 3. Verify Workspace Readiness
+
+Inspect system dependencies, toolchains, and agent safety boundaries:
+
+```bash
 ota doctor
+```
 
-# Run tests & builds
+### 4. Run Test Suite & Build
+
+Execute the test suite and binary builds governed by `ota.yaml`:
+
+```bash
+# Run unit and integration tests
 ota run test
+
+# Build binary
 ota run build
 ```
 
-### Anyisland (Distribution & Package Management)
-[Anyisland](https://github.com/nathfavour/anyisland) is a decentralized package manager. It ingests Threader via its [`anyisland.json`](anyisland.json) manifest.
+### 5. Adding New Platform Drivers
 
-```bash
-# Install Anyisland
-curl -fsSL https://raw.githubusercontent.com/nathfavour/anyisland/master/install.sh | bash
+Adding support for any new social platform (e.g. Bluesky / ATProto, Farcaster) requires only 3 steps:
 
-# Initialize Island and PATH
-anyisland setup
-
-# Ingest and install Threader
-anyisland ingest github.com/nathfavour/threader
-
-# List installed tools
-anyisland list
-```
+1. Create `internal/platform/<name>/driver.go`.
+2. Implement `platform.PlatformDriver` (`ID()`, `ValidateConfig()`, `Publish()`, `Capabilities()`).
+3. Call `platform.Register(&MyDriver{})` inside an `init()` block.
 
 ---
 
@@ -128,16 +153,6 @@ threader status
 # View real-time daemon logs
 threader logs
 ```
-
----
-
-## 🔌 Adding New Platform Drivers
-
-To add a new platform (e.g. Bluesky / ATProto):
-
-1. Create `internal/platform/bluesky/driver.go`.
-2. Implement `platform.PlatformDriver` (`ID()`, `ValidateConfig()`, `Publish()`, `Capabilities()`).
-3. Call `platform.Register(&BlueskyDriver{})` in an `init()` block.
 
 ---
 

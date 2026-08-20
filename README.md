@@ -32,10 +32,10 @@ curl -fsSL https://raw.githubusercontent.com/nathfavour/anyisland/master/install
 anyisland setup
 ```
 
-### 3. Ingest and Install Threader
+### 3. Install Threader
 
 ```bash
-anyisland ingest github.com/nathfavour/threader
+anyisland install nathfavour/threader
 ```
 
 *Direct script install fallback:*

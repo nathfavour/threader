@@ -34,25 +34,35 @@ ota run build
 
 ## 🛠️ Execution Governance & Tooling
 
-### Ota Setup (Execution Governance)
-[Ota](https://ota.run) provides deterministic execution governance and verification:
+### Ota (Execution Governance & Verification)
+[Ota](https://ota.run) provides deterministic execution governance and developer/CI verification.
 
 ```bash
+# Install Ota (macOS / Linux)
+curl -fsSL https://dist.ota.run/install.sh | sh
+
+# Install Ota (Windows PowerShell)
+irm https://dist.ota.run/install.ps1 | iex
+
 # Verify workspace contract and dependencies
 ota doctor
 
-# Run tests
+# Run tests & builds
 ota run test
-
-# Build binary
 ota run build
 ```
 
-### Anyisland Ingestion & Tool Management
-[Anyisland](https://github.com/nathfavour/anyisland) is a decentralized package manager. Threader exposes an [`anyisland.json`](anyisland.json) manifest defining its build steps, Tesseract/Leptonica runtime dependencies, and pulse heartbeat:
+### Anyisland (Distribution & Package Management)
+[Anyisland](https://github.com/nathfavour/anyisland) is a decentralized package manager. It ingests Threader via its [`anyisland.json`](anyisland.json) manifest.
 
 ```bash
-# Ingest and install Threader into your local Island
+# Install Anyisland
+curl -fsSL https://raw.githubusercontent.com/nathfavour/anyisland/master/install.sh | bash
+
+# Initialize Island and PATH
+anyisland setup
+
+# Ingest and install Threader
 anyisland ingest github.com/nathfavour/threader
 
 # List installed tools

@@ -17,30 +17,16 @@ Threader is an autonomous, multi-platform marketing and engagement engine. It co
 
 ## 📦 Installation
 
-Threader is distributed and managed for end users via [Anyisland](https://github.com/nathfavour/anyisland), a decentralized, platform-agnostic package manager that resolves runtime system dependencies and builds the application binary automatically.
-
-### 1. Install Anyisland
+Install Threader instantly with a single command (powered by [Anyisland](https://github.com/nathfavour/anyisland)):
 
 ```bash
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/nathfavour/anyisland/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nathfavour/anyisland/master/install.sh | bash -s -- nathfavour/threader
 ```
 
-### 2. Initialize Island Environment
-
-```bash
-anyisland setup
-```
-
-### 3. Install Threader
-
+*Or if you already have Anyisland installed:*
 ```bash
 anyisland install nathfavour/threader
-```
-
-*Direct script install fallback:*
-```bash
-curl -fsSL https://raw.githubusercontent.com/nathfavour/threader/master/install.sh | bash
 ```
 
 ---

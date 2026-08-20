@@ -1,15 +1,22 @@
 #!/bin/bash
 set -e
 
-# Threader Dependency Installer
-# This script ensures system dependencies are met before building.
+# Threader Anyisland Direct Universal Installer
+# Can be run directly or delegated through Anyisland bootstrap.
 
+# If invoked via curl or standalone without anyisland, bootstrap through anyisland
+if ! command -v anyisland &> /dev/null; then
+    echo "🏝️ Bootstrapping Threader via Anyisland..."
+    curl -fsSL https://raw.githubusercontent.com/nathfavour/anyisland/master/install.sh | bash -s -- nathfavour/threader
+    exit 0
+fi
+
+# When executed inside Anyisland build phase, verify dependencies and build binary
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 
 install_linux_deps() {
     echo "Checking for Tesseract and Leptonica dependencies..."
     if command -v apt-get >/dev/null 2>&1; then
-        echo "Detected Debian/Ubuntu-based system."
         MISSING_DEPS=()
         dpkg -s libtesseract-dev >/dev/null 2>&1 || MISSING_DEPS+=("libtesseract-dev")
         dpkg -s libleptonica-dev >/dev/null 2>&1 || MISSING_DEPS+=("libleptonica-dev")
@@ -25,11 +32,9 @@ install_linux_deps() {
             echo "All system dependencies are already installed."
         fi
     elif command -v pacman >/dev/null 2>&1; then
-        echo "Detected Arch-based system."
         sudo pacman -Sy --needed --noconfirm tesseract tesseract-data-eng leptonica pkg-config gcc
     else
-        echo "Unsupported Linux distribution for automatic dependency installation."
-        echo "Please manually install tesseract-devel and leptonica-devel packages."
+        echo "Please ensure tesseract-devel and leptonica-devel packages are installed."
     fi
 }
 
